@@ -1,3 +1,4 @@
+# .\venv\Scripts\Activate.ps1
 from foundry_local_sdk import Configuration, FoundryLocalManager
 
 def main():
@@ -9,7 +10,7 @@ def main():
     chat_model.load()
     chat_client = chat_model.get_chat_client()
     messages = [{"role": "user", "content":"Hello World!"}]
-    print()
+    print() 
     print("Answer: ", end="", flush=True)
     for chunk in chat_client.complete_streaming_chat(messages):
         if chunk.choices:

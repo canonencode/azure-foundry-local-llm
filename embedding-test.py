@@ -1,4 +1,5 @@
-#Week 2 embedding + cosine simularity sandbox
+# Week 2 embedding + cosine simularity sandbox
+# .\venv\Scripts\Activate.ps1
 
 import math
 from foundry_local_sdk import Configuration, FoundryLocalManager
