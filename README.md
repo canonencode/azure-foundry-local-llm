@@ -64,6 +64,19 @@ python -m pip install -r requirements.txt
   top-K matching chunks; tested against on-topic and off-topic queries
   (relevant queries scored 0.70–0.87, an unrelated query topped out at 0.34)
 
+### Week 4 — LLM Integration & Application Assembly ✅
+- `main.py` — assembled the end-to-end CLI: `answer_query()` retrieves the
+  top chunks, gates the call to the chat model with a relevance threshold
+  (`0.5`) before ever invoking it, and streams a grounded answer from
+  `phi-3-mini-4k` using a system prompt with the retrieved context
+- Implemented the code-level relevance filter flagged as a gap in Week 2 —
+  since the model itself doesn't reliably refuse out-of-context questions,
+  off-topic queries are now short-circuited to "I don't have that
+  information" before the LLM is called at all
+- Verified end-to-end: an in-scope question ("What is Foundry Local?") got a
+  grounded, source-based answer; an out-of-scope question ("What is the
+  capital of France?") correctly triggered the fallback
+
 ## Notes / Known Issues
 - Document's example model `phi-1.5` is not in the actual Foundry Local 
   catalog; using `phi-3-mini-4k` instead
