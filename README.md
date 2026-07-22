@@ -55,8 +55,14 @@ python -m pip install -r requirements.txt
     cosine similarity threshold) is needed before the model is called, 
     planned for Week 3
 
-### Week 3 — Data Ingestion & Retrieval Pipeline (in progress)
-- ...
+### Week 3 — Data Ingestion & Retrieval Pipeline ✅
+- `ingest.py` — chunks the knowledge base, embeds each chunk with
+  `qwen3-embedding-0.6b`, and stores `(doc_index, content, embedding)` in
+  `knowledge.db`, updating existing rows instead of duplicating them on rerun
+- `retrieve.py` — `get_top_chunks(query, embedding_client, k)` embeds a query,
+  computes cosine similarity against every stored embedding, and returns the
+  top-K matching chunks; tested against on-topic and off-topic queries
+  (relevant queries scored 0.70–0.87, an unrelated query topped out at 0.34)
 
 ## Notes / Known Issues
 - Document's example model `phi-1.5` is not in the actual Foundry Local 
