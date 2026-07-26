@@ -42,7 +42,10 @@ python -m pip install -r requirements.txt
   unrelated sentences)
 - `sqlite_test.py` — practiced SQLite basics: created a `documents` table 
   (`id`, `content`, `embedding`), inserted rows safely with `?` placeholders, 
-  queried and fetched results
+  queried and fetched results, then queried a single row by `id` and filtered
+  rows with a `LIKE` keyword match (added during the Week 5 audit below —
+  the original version only did `SELECT *`, missing the plan's explicit
+  "query by id or filter by keyword" instruction)
   - Discovered: `CREATE TABLE IF NOT EXISTS` does not prevent duplicate data 
     on repeated script runs — each run re-inserts the same rows
 - `prompt_test.py` — tested system-prompt-based context grounding
@@ -91,6 +94,74 @@ python -m pip install -r requirements.txt
   build the retrieval-logging fix (good candidate for the scaffolded
   "user writes it" technique — see the "Session continuity" note below), or
   move to Week 5 (System Testing & Evaluation) once Week 4 is fully closed out
+
+### Week 5 — System Testing & Evaluation ✅
+
+**Functional testing**
+- Closed the Week 4 gap: `answer_query()` in `main.py` now logs retrieved
+  `(score, content)` chunks before answering, and returns the answer text
+  instead of only printing it (needed so tests can check it programmatically)
+- `evaluate.py` — functional test harness covering three categories the plan
+  calls for: answerable questions, off-topic/unanswerable questions, and
+  edge cases. Edge cases include the plan's own named examples — empty
+  query input, and a general question ("Can you help me with something?")
+  — plus one self-devised case (a gibberish string), added because it
+  exposed a real bug (below), not because the plan asked for it specifically
+- Two real bugs found and fixed during testing:
+  1. A gibberish query scored 0.69 similarity — above the 0.5
+     `RELEVANCE_THRESHOLD` — by chance token overlap with a stored chunk,
+     so it reached the LLM instead of getting rejected. Fixed with
+     `is_gibberish()` in `main.py`: rejects any word with 5+ consecutive
+     consonants (treating `y` as vowel-like) before the question is ever
+     embedded. (First tried a 4-consonant threshold; that false-positived
+     on the real word "Foundry", so raised to 5.)
+  2. Calling `answer_query("", ...)` directly crashed with
+     `ValueError('Input must be a non-empty string.')` — the CLI's blank-input
+     skip in `main()` masked this, but the function itself wasn't safe.
+     Fixed by rejecting `not question.strip()` the same way as gibberish,
+     before any embedding call.
+- The general-question edge case ("Can you help me with something?") also
+  scored above threshold (0.59) and reached the LLM, same as the gibberish
+  case — but the model asked for clarification instead of fabricating an
+  answer, so this one was left alone; it's a real question, not garbage
+  input, and graceful clarification is reasonable behavior here
+- Final result: 10/10 test cases pass
+
+**Performance & Debugging** — checked against the plan's three named
+optimizations specifically, not just "discussed" in the abstract:
+- *"Retrieving fewer chunks"* — tested directly: `get_top_chunks` with
+  `k=2` vs `k=3` measured within noise of each other (~350-425ms either
+  way), because it computes cosine similarity against all 8 stored
+  embeddings regardless of `k` — `k` only slices the result afterward. So
+  this optimization would not help here; verified, not assumed
+- *"Using a smaller model"* — already satisfied since Week 4: `phi-3-mini-4k`
+  was chosen specifically for its small size, matching the plan's own
+  suggestion ("Phi-3.5 Mini or similar," picked for speed)
+- *"Caching embeddings instead of recomputing them"* — already satisfied
+  since Week 3: `ingest.py` stores document embeddings in `knowledge.db`
+  and only recomputes on rerun if content changed
+- No incorrect retrieval or formatting issues found; every test question's
+  top-scored chunk was the actually-relevant one
+
+**Evaluation and Improvement** — the plan's own example for fixing
+long/repetitive answers is "adjust the prompt format," so that's what got
+applied (not a token-length cap, which was tried first and reverted — see
+below):
+- Self-critique found two answers (RAG explanation, cosine-similarity
+  explanation) read long and repetitive against a "concise" instruction
+- Fix: reworded `SYSTEM_PROMPT` in `main.py` to explicitly cap answers at
+  2 sentences and forbid repeating the question
+- Verified with real before/after timing on the same two questions: RAG
+  explanation 11.2s -> 7.2s, cosine-similarity explanation 15.1s -> 6.3s,
+  both now 2 clean sentences with no repetition
+- **Dead end, kept for the record:** first tried capping
+  `chat_client.settings.max_tokens` instead of touching the prompt. At 150
+  tokens it cut the cosine-similarity answer off mid-sentence with no
+  closing punctuation — a real regression (a truncated answer looks broken,
+  not concise). Raised to 220 to stop the truncation, but once the prompt
+  fix above was tested and shown to solve both conciseness and speed more
+  effectively on its own, the token cap was removed entirely rather than
+  stacking both fixes
 
 ## Session continuity
 Working style established with this user: tutoring, not vibe-coding — explain

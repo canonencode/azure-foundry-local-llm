@@ -42,6 +42,15 @@ def main():
     rows = cursor.fetchall()
     for lines in rows: print(lines)
 
+    #Query a single record by id
+    cursor.execute("SELECT * FROM documents WHERE id = ?", (2,))
+    print("\nRecord with id=2:", cursor.fetchone())
+
+    #Filter rows by a text keyword
+    cursor.execute("SELECT * FROM documents WHERE content LIKE ?", ("%car%",))
+    print("\nRows containing 'car':")
+    for lines in cursor.fetchall(): print(lines)
+
 
 
 
