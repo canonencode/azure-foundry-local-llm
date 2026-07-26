@@ -19,10 +19,44 @@ to a local LLM for grounded, source-based answers — with zero cloud dependency
 
 ## Setup
 
-```bash
+**Prerequisites:** Windows 10/11 with Python 3.10+ on PATH. This project
+depends on `foundry-local-sdk-winml`/`foundry-local-core-winml`, which bundle
+Windows ML native binaries — it is Windows-only, not cross-platform. An
+internet connection is needed for the first run only, to download the two
+models below; every run after that is fully offline.
+
+**Quick setup (automated):**
+```powershell
+.\setup.ps1
+```
+This creates the venv, installs dependencies, and runs `ingest.py` to build
+`knowledge.db`. It's safe to re-run. If PowerShell blocks it with an
+execution-policy error, run `powershell -ExecutionPolicy Bypass -File .\setup.ps1`
+instead. The script only activates the venv for its own commands — activate
+it yourself afterward for your own shell (see below).
+
+**Manual setup**, or if you want to see each step:
+```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python ingest.py
+```
+
+`requirements.txt` is UTF-16 encoded — preserve that encoding if editing it
+by hand or regenerating it (`pip freeze | Out-File -FilePath requirements.txt
+-Encoding unicode` in PowerShell), or pip may fail to parse it.
+
+`knowledge.db` and `test.db` are gitignored and not tracked in the repo — on
+a fresh clone there is no database file, so `ingest.py` must run once (done
+automatically by `setup.ps1`, or manually as shown above) before `main.py` or
+`app.py` return anything useful.
+
+**Running the app**, once setup is done and the venv is activated:
+```powershell
+python main.py          # CLI Q&A loop
+streamlit run app.py    # web UI
+python check-db.py      # inspect knowledge.db contents (debugging)
 ```
 
 ## Progress Log
