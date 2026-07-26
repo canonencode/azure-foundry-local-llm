@@ -163,15 +163,76 @@ below):
   effectively on its own, the token cap was removed entirely rather than
   stacking both fixes
 
+### Added GUI — Streamlit Web Interface
+Built with Claude Code in directive mode, not tutored — unlike `ingest.py`/
+`main.py`, this code was not walked through line-by-line with the user. Claude
+wrote, tested, and debugged this end-to-end in the browser; the user directed
+it through feedback and caught real issues by review, but did not write or
+co-derive the code. Noted here for an accurate record, not as a gap requiring
+immediate action — see "Session continuity" below.
+
+- `app.py` — a Streamlit chat-style front end (Option B from the plan) layered
+  over the existing pipeline. Reuses `build_clients()`, `answer_query()`,
+  `is_gibberish()`, and `RELEVANCE_THRESHOLD` from `main.py` and
+  `get_top_chunks()` from `retrieve.py` unchanged — no modification to the
+  underlying RAG logic
+- Chat interface via `st.chat_message`/`st.chat_input`; conversation history
+  kept in `st.session_state`. Each answer shows an expander labeled either
+  "Chunks used for this answer" or "No chunk cleared the relevance threshold
+  (0.5)...", so retrieval stays visible and verifiable rather than hidden
+  behind the UI
+- Delete controls: a per-message `✕` button (no confirmation needed — just
+  ask again if deleted by mistake) and a sidebar "Clear all history" button
+  gated behind a confirmation popover (irreversible, so it asks first)
+- Custom dark theme (`.streamlit/config.toml` + injected CSS): warm amber
+  accent on charcoal, Fraunces serif for headings, IBM Plex Sans/Mono for
+  body and technical values (model names, scores); custom SVG favicon and
+  user avatar (`assets/`) replacing Streamlit's defaults, after emoji icons
+  were flagged as looking unprofessional for a product-style interface
+- Real bugs found and fixed while building this, not just cosmetic tweaks:
+  - Hiding Streamlit's toolbar (to remove the "Deploy" button) also hid the
+    sidebar's reopen arrow, which lives in the same container — this made
+    the sidebar permanently unreachable once collapsed. Fixed by relying on
+    `config.toml`'s `toolbarMode="minimal"` instead of a blanket CSS hide
+  - A global `white-space: nowrap` added to stop one button's text from
+    wrapping broke the longer example-question buttons, which relied on
+    wrapping to fit their column, causing them to overlap. Reverted the
+    global rule; replaced the delete button's label with a single
+    non-wrapping glyph (`✕`) instead of fighting column width
+  - The delete button's red hover color silently failed to apply at first —
+    the CSS selector assumed the wrong DOM structure. Streamlit wraps
+    `st.columns()` output in an extra `stLayoutWrapper` layer not visible
+    from the plan/docs; traced the actual structure directly in the browser
+    and rewrote the selector to match
+- Verified end-to-end in the browser: grounded answers, the relevance-gate
+  fallback, gibberish rejection, delete/clear history, and sidebar
+  collapse/reopen all confirmed working together, not just individually
+
 ## Session continuity
 Working style established with this user: tutoring, not vibe-coding — explain
 concepts before code, small chunks, ask the user to explain things back, and
 when the user needs to write code themselves, use a scaffolded technique
 (sketch the module map, give each small piece a contract, user writes 3-8
 lines at a time, test in isolation before integrating). Git commits should
-not include a Co-Authored-By trailer. Full detail lives in this session's
-chat history, but the essentials above are what a fresh conversation needs to
-pick this project back up without re-deriving any of it.
+not include a Co-Authored-By trailer.
+
+**Honest status on that working style, as of the GUI work:** Week 1-4's core
+pipeline (`ingest.py`, `main.py`) genuinely got the line-by-line tutoring
+treatment. `retrieve.py`'s `cosine_similarity()` did not — explained
+conceptually only, walkthrough never finished, still an open gap. Starting at
+Week 5 ("don't get stuck on tutorial loop hell") and continuing through the
+entire Streamlit UI, work shifted to directive mode: Claude wrote, tested, and
+debugged; the user directed via feedback and review rather than writing or
+co-deriving the code. This was an explicit, discussed trade-off, not an
+accident — but it means genuine understanding of Week 5+ and the UI hasn't
+been built yet the way Weeks 1-4 were. If resuming tutoring mode, good
+next steps in priority order: (1) finish `retrieve.py`'s walkthrough — the
+oldest open gap, (2) retroactively walk through `evaluate.py` and the Week 5
+fixes, (3) retroactively walk through `app.py`.
+
+Full detail lives in this session's chat history, but the essentials above
+are what a fresh conversation needs to pick this project back up without
+re-deriving any of it.
 
 ## Notes / Known Issues
 - Document's example model `phi-1.5` is not in the actual Foundry Local 
