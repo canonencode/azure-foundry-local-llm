@@ -76,6 +76,31 @@ python -m pip install -r requirements.txt
 - Verified end-to-end: an in-scope question ("What is Foundry Local?") got a
   grounded, source-based answer; an out-of-scope question ("What is the
   capital of France?") correctly triggered the fallback
+- Code build-out is done; the plan's optional stretch item (source citations,
+  "according to Document X...") was deliberately skipped as non-required
+- **Still open:** the plan's Week 4 instruction to log retrieved chunks for
+  verification (page 10-11: "ensure the retrieval is happening... log
+  retrieved chunks for verification") was never implemented in `main.py` —
+  a real gap, not optional
+- Tutoring status: `ingest.py` and `main.py` have been walked through
+  line-by-line with the user (imports, SQL, embeddings, the relevance gate,
+  streaming). `retrieve.py`'s `cosine_similarity()` has been explained
+  conceptually (why divide by `norm_a * norm_b`) but not yet walked line-by-
+  line the way the other two files were
+- **Next up:** either finish `retrieve.py`'s line-by-line walkthrough, or
+  build the retrieval-logging fix (good candidate for the scaffolded
+  "user writes it" technique — see the "Session continuity" note below), or
+  move to Week 5 (System Testing & Evaluation) once Week 4 is fully closed out
+
+## Session continuity
+Working style established with this user: tutoring, not vibe-coding — explain
+concepts before code, small chunks, ask the user to explain things back, and
+when the user needs to write code themselves, use a scaffolded technique
+(sketch the module map, give each small piece a contract, user writes 3-8
+lines at a time, test in isolation before integrating). Git commits should
+not include a Co-Authored-By trailer. Full detail lives in this session's
+chat history, but the essentials above are what a fresh conversation needs to
+pick this project back up without re-deriving any of it.
 
 ## Notes / Known Issues
 - Document's example model `phi-1.5` is not in the actual Foundry Local 
