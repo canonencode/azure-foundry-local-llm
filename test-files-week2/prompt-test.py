@@ -1,10 +1,16 @@
-#Week 2 Prompt Engineering
+# Week 2 - Prompt engineering sandbox
 # .\venv\Scripts\Activate.ps1
+#
+# This experiment (an off-topic question against emphatic/all-caps prompt
+# wording) is the empirical basis for main.py's RELEVANCE_THRESHOLD gate:
+# the model still answered from its own training knowledge instead of
+# declining, which is why relevance filtering later got enforced in code
+# rather than trusted to the prompt alone.
 
 from foundry_local_sdk import Configuration, FoundryLocalManager
 
 def main():
-    config = Configuration(app_name = "azure_foundry_prompt_test")
+    config = Configuration(app_name="azure-foundry-prompt-test")
     FoundryLocalManager.initialize(config)
     manager = FoundryLocalManager.instance
     chat_model = manager.catalog.get_model("phi-3-mini-4k")
@@ -13,10 +19,10 @@ def main():
     chat_client = chat_model.get_chat_client()
 
     system_prompt = (
-    "Answer the user's question ONLY BY using only the provided context. "
-    "If the context does not contain enough information, DO NOT answer and say you don't know."
-    "IF you don't have enough information to answer,SAY I DON'T KNOW rather than guessing."
-    "You are polite, straightforward, and easy to understand."
+        "Answer the user's question ONLY BY using only the provided context. "
+        "If the context does not contain enough information, DO NOT answer and say you don't know."
+        "IF you don't have enough information to answer, SAY I DON'T KNOW rather than guessing."
+        "You are polite, straightforward, and easy to understand."
     )
 
     context = "Foundry Local runs AI models directly on your device without cloud connectivity."

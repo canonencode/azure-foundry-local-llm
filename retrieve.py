@@ -14,6 +14,8 @@ def cosine_similarity(a, b):
     return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
 
 
+# Standalone bootstrap for this file's own __main__ smoke test below - not
+# used by main.py/app.py, which load their own clients via build_clients().
 def get_embedding_client():
     config = Configuration(app_name="azure-foundry-local-llm-retrieve")
     FoundryLocalManager.initialize(config)
@@ -46,6 +48,9 @@ def get_top_chunks(query, embedding_client, k=3):
     return scored[:k]
 
 
+# Week 3-era smoke test: a quick manual check that retrieval finds
+# sensible chunks, predating evaluate.py's proper test harness (Week 5).
+# Kept as-is rather than removed - still a fast way to eyeball retrieval.
 def main():
     embedding_client = get_embedding_client()
 

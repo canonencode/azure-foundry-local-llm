@@ -276,7 +276,7 @@ if prompt:
                 top_chunks = []
             else:
                 top_chunks = get_top_chunks(prompt, embedding_client, k=3)
-            answer = answer_query(prompt, chat_client, embedding_client, verbose=False)
+            answer = answer_query(prompt, chat_client, embedding_client, verbose=False, top_chunks=top_chunks)
         st.write(answer)
     st.session_state.history.append({
         "question": prompt,

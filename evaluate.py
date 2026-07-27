@@ -4,9 +4,43 @@
 # .\venv\Scripts\Activate.ps1
 
 import time
-from main import build_clients, answer_query
+from main import build_clients, answer_query, is_gibberish
 
 FALLBACK_TEXT = "I don't have that information."
+
+# Direct unit checks on is_gibberish() itself, run separately from the
+# end-to-end TEST_CASES below. Reason: check() below can only inspect the
+# final answer string, and "I don't have that information." is identical
+# whether a question was rejected by is_gibberish() or by the downstream
+# RELEVANCE_THRESHOLD - no end-to-end assertion can tell those two rejection
+# paths apart, only calling is_gibberish() directly can.
+# Known, accepted limitation not covered here: keyboard-mash strings that
+# happen to contain a digraph at the exact run-length-5 boundary (e.g.
+# "sdfgh"), and a few real words unrelated to digraphs (e.g. "postscript",
+# "thumbscrew") can still slip past this heuristic - see the comment above
+# DIGRAPHS in main.py.
+GIBBERISH_CHECKS = [
+    ("strengths", False),
+    ("twelfths", False),
+    ("catchphrase", False),
+    ("Foundry", False),
+    ("rhythm", False),
+    ("asdkjhaskjdh", True),
+    ("ajksnfkasnds", True),
+    ("sadjknd", True),
+]
+
+
+def check_is_gibberish():
+    passed = 0
+    for word, expected in GIBBERISH_CHECKS:
+        got = is_gibberish(word)
+        status = "PASS" if got == expected else "FAIL"
+        if got == expected:
+            passed += 1
+        print(f"[{status}] is_gibberish({word!r}) = {got} (expected {expected})")
+    print(f"{passed}/{len(GIBBERISH_CHECKS)} gibberish-detector checks passed\n")
+    return passed
 
 # expect: "answer" -> should be grounded in the knowledge base, not the fallback
 #         "fallback" -> off-topic, should trigger the relevance-gate fallback
@@ -35,6 +69,9 @@ def check(question, answer, expect):
 
 
 def main():
+    print("=== Gibberish detector unit checks ===")
+    check_is_gibberish()
+
     chat_client, embedding_client = build_clients()
 
     results = []

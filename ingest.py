@@ -29,7 +29,7 @@ def main():
         )
     """)
 
-    config = Configuration(app_name = "azure-foundry-local-llm-ingest")
+    config = Configuration(app_name="azure-foundry-local-llm-ingest")
     FoundryLocalManager.initialize(config)
     manager = FoundryLocalManager.instance
 
@@ -42,6 +42,8 @@ def main():
     response = embedding_client.generate_embeddings(documents)
     doc_embeddings = [item.embedding for item in response.data]
 
+    # Keyed on the UNIQUE doc_index column so rerunning this script updates
+    # existing rows in place instead of inserting duplicates.
     for doc_index, content in enumerate(documents):
         embedding = doc_embeddings[doc_index]
         embedding_str = json.dumps(embedding)
@@ -50,17 +52,20 @@ def main():
 
         if existing:
             cursor.execute(
-                 "UPDATE documents SET content = ?, embedding = ? WHERE doc_index = ?",
-                (content, embedding_str, doc_index)    
+                "UPDATE documents SET content = ?, embedding = ? WHERE doc_index = ?",
+                (content, embedding_str, doc_index)
             )
-            
-
         else:
             cursor.execute(
                 "INSERT INTO documents (doc_index, content, embedding) VALUES (?, ?, ?)",
                 (doc_index, content, embedding_str)
             )
-            
+
+    # Documents are keyed by their position in the list above (via enumerate),
+    # so if an entry was removed, any row at or past the new shorter length is
+    # orphaned - delete it rather than leaving a stale chunk retrievable forever.
+    cursor.execute("DELETE FROM documents WHERE doc_index >= ?", (len(documents),))
+
     conn.commit()
     conn.close()
     print(f"Ingestion complete. {len(documents)} documents processed.")

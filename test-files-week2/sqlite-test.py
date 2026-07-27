@@ -1,15 +1,15 @@
-#Week 2 - SQLite Sandbox
+# Week 2 - SQLite sandbox
 # .\venv\Scripts\Activate.ps1
 
 import sqlite3
 
 def main():
 
-    #Connect to a database
+    # Connect to a database
     conn = sqlite3.connect("test.db")
     cursor = conn.cursor()
 
-    #Create a table
+    # Create a table
     cursor.execute("DROP TABLE IF EXISTS documents")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS documents (
@@ -19,7 +19,7 @@ def main():
         )
     """)
 
-    #Insert rows
+    # Insert rows
     content_value = "Foundry Local runs models locally."
     embedding_value = "fake_vector_123"
     cursor.execute("INSERT INTO documents (content, embedding) VALUES (?,?)", (content_value, embedding_value) )
@@ -27,26 +27,26 @@ def main():
     content_value2 = "Microsoft Created Windows"
     embedding_value2 = "fake_vector_345"
     cursor.execute("INSERT INTO documents (content, embedding) VALUES (?,?)", (content_value2, embedding_value2) )
-    
+
     content_value3 = "Toyota is the most reliable car brand."
     embedding_value3 = "fake_vector_678"
     cursor.execute("INSERT INTO documents (content, embedding) VALUES (?,?)", (content_value3, embedding_value3) )
 
 
 
-    #Commit Changes
+    # Commit changes
     conn.commit()
 
-    #Query all rows back
+    # Query all rows back
     cursor.execute("SELECT * FROM documents")
     rows = cursor.fetchall()
     for lines in rows: print(lines)
 
-    #Query a single record by id
+    # Query a single record by id
     cursor.execute("SELECT * FROM documents WHERE id = ?", (2,))
     print("\nRecord with id=2:", cursor.fetchone())
 
-    #Filter rows by a text keyword
+    # Filter rows by a text keyword
     cursor.execute("SELECT * FROM documents WHERE content LIKE ?", ("%car%",))
     print("\nRows containing 'car':")
     for lines in cursor.fetchall(): print(lines)
@@ -55,4 +55,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

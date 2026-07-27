@@ -242,6 +242,64 @@ immediate action — see "Session continuity" below.
   fallback, gibberish rejection, delete/clear history, and sidebar
   collapse/reopen all confirmed working together, not just individually
 
+### Week 6 — Code Cleanup & Comments
+A full codebase audit (background agent) found mostly cosmetic issues across
+every file, plus three real bugs. Asked per-bug whether to fix now or just
+document — fixed all three, each validated (a second background agent
+computationally stress-tested the trickiest fix before it was written) and
+verified after landing:
+
+- **`main.py`'s `is_gibberish()` false-positived on real words** with long
+  consonant runs — "strengths", "twelfths", "catchphrase" were all
+  incorrectly rejected as gibberish, and since the check is `any()` over
+  words, this misfired on a whole legitimate question if just one word
+  triggered it (e.g. "What are the strengths of this approach?"). Proved by
+  hand that no single `min_run` threshold can fix this without reopening the
+  original Week 5 bug ("catchphrase"'s consonant run is *longer* than the
+  known gibberish test case's). Fix: collapse English digraphs (`ch, sh, th,
+  ph, gh, wh, ck, ng` — two letters, one sound) into a single unit before
+  counting the run, keeping `min_run=5`. Stress-tested against ~120 words —
+  holds up, with one accepted, bounded trade-off: keyboard-mash strings that
+  happen to contain a digraph at the exact run-length-5 boundary (e.g.
+  `sdfgh`) can now slip past this specific check. Documented, not hidden —
+  `RELEVANCE_THRESHOLD` is the backstop, since garbage text essentially
+  never scores >= 0.5 similarity against real content. Verified with 8 new
+  direct unit checks in `evaluate.py` (`check_is_gibberish()`, run before
+  `build_clients()` since it needs no models) — all pass, and the existing
+  10-case end-to-end suite still reports 10/10 unchanged
+- **`ingest.py` never deleted stale rows** — removing a document from the
+  hardcoded list left its old row in `knowledge.db` forever, still
+  retrievable. Fix: delete any row where `doc_index >= len(documents)` after
+  the upsert loop. Verified live: temporarily shrank the list from 8 to 7
+  documents, ran `ingest.py`, confirmed the orphaned row was gone
+  (`check-db.py` showed exactly 7 rows, no stale entry), then restored the
+  full list and re-ran to confirm `knowledge.db` was back to normal
+- **`app.py` called `get_top_chunks()` twice per question** — once for its
+  own "chunks used" display, once again inside `answer_query()` — the same
+  query re-embedded and every document re-scored twice. Fix: added an
+  optional `top_chunks=None` parameter to `answer_query()`; when provided,
+  it skips the internal call. Fully backward compatible (`main.py`'s CLI
+  loop and `evaluate.py` never pass it). Verified live with temporary print
+  instrumentation in `retrieve.py`: submitted one question through the
+  Streamlit UI, confirmed `get_top_chunks` logged exactly once, then removed
+  the instrumentation
+- Comments added explaining non-obvious "why"s: `VOWELS` including `y`
+  (main.py), the digraph trade-off (main.py), the upsert-by-`doc_index`
+  rationale (ingest.py), `retrieve.py`'s standalone smoke-test entry point
+  (predates `evaluate.py`, not dead code), and `prompt-test.py`'s empirical
+  link to the `RELEVANCE_THRESHOLD` design decision it motivated
+- Style normalized across `ingest.py`, `check-db.py`, and all three
+  `test-files-week2/` sandbox scripts: consistent keyword-arg spacing,
+  comment formatting, trailing whitespace removed, a stray format-spec bug
+  fixed (`embedding-test.py` was printing an extra leading space before
+  scores), and `check-db.py` brought in line with every other script's
+  `def main(): ... if __name__ == "__main__":` structure
+- Two additional false-positive words found during stress-testing
+  (`postscript`, `thumbscrew` — a different, pre-existing class of false
+  positive unrelated to digraphs) were left as a documented, out-of-scope
+  limitation rather than fixed — implausible as real query vocabulary for
+  this project, and no adjustment can fix them without reopening other cases
+
 ## Session continuity
 Working style established with this user: tutoring, not vibe-coding — explain
 concepts before code, small chunks, ask the user to explain things back, and
@@ -250,19 +308,26 @@ when the user needs to write code themselves, use a scaffolded technique
 lines at a time, test in isolation before integrating). Git commits should
 not include a Co-Authored-By trailer.
 
-**Honest status on that working style, as of the GUI work:** Week 1-4's core
+**Honest status on that working style, as of Week 6:** Week 1-4's core
 pipeline (`ingest.py`, `main.py`) genuinely got the line-by-line tutoring
 treatment. `retrieve.py`'s `cosine_similarity()` did not — explained
-conceptually only, walkthrough never finished, still an open gap. Starting at
-Week 5 ("don't get stuck on tutorial loop hell") and continuing through the
-entire Streamlit UI, work shifted to directive mode: Claude wrote, tested, and
-debugged; the user directed via feedback and review rather than writing or
-co-deriving the code. This was an explicit, discussed trade-off, not an
-accident — but it means genuine understanding of Week 5+ and the UI hasn't
-been built yet the way Weeks 1-4 were. If resuming tutoring mode, good
-next steps in priority order: (1) finish `retrieve.py`'s walkthrough — the
-oldest open gap, (2) retroactively walk through `evaluate.py` and the Week 5
-fixes, (3) retroactively walk through `app.py`.
+conceptually only, walkthrough never finished, still an open gap (the Week 6
+comments added to `retrieve.py` explain *what* the smoke-test block is for,
+which is not the same as a tutored walkthrough of *how* `cosine_similarity()`
+works). Starting at Week 5 ("don't get stuck on tutorial loop hell") and
+continuing through the Streamlit UI and Week 6's cleanup pass, work stayed in
+directive mode: Claude wrote, tested, and debugged (including two background
+agents used to audit the codebase and stress-test the trickiest bug fix);
+the user chose scope (which bugs to fix vs. document) via direct questions,
+but did not write or co-derive the code itself. This was an explicit,
+discussed trade-off, not an accident — but it means genuine understanding of
+Week 5+, the UI, and Week 6's three bug fixes hasn't been built yet the way
+Weeks 1-4 were. If resuming tutoring mode, good next steps in priority order:
+(1) finish `retrieve.py`'s walkthrough — the oldest open gap, (2)
+retroactively walk through `evaluate.py` and the Week 5 fixes, (3)
+retroactively walk through `app.py`, (4) retroactively walk through Week 6's
+three bug fixes, especially *why* the digraph-collapse approach works for
+`is_gibberish()` — it's the least intuitive piece of code in the project.
 
 Full detail lives in this session's chat history, but the essentials above
 are what a fresh conversation needs to pick this project back up without

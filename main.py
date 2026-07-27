@@ -36,13 +36,31 @@ def build_clients():
     return chat_client, embedding_model.get_embedding_client()
 
 
+# "y" counts as a vowel here to avoid false positives on real words like
+# "shyly"/"rhythm"/"gypsy", where it's the only vowel sound in a syllable.
 VOWELS = set("aeiouy")
+
+# Two letters, one sound - collapsing these before counting a consonant run
+# is why real words with long raw letter-runs ("strengths", "twelfths",
+# "catchphrase") don't get misread as gibberish. Known trade-off: a
+# keyboard-mash string that happens to contain one of these at the exact
+# run-length-5 boundary (e.g. "sdfgh") can now slip past this check alone -
+# RELEVANCE_THRESHOLD below is the backstop for those, since garbage text
+# essentially never scores >= 0.5 similarity against real content.
+DIGRAPHS = ("ch", "sh", "th", "ph", "gh", "wh", "ck", "ng")
+
+
+def collapse_digraphs(word):
+    word = word.lower()
+    for digraph in DIGRAPHS:
+        word = word.replace(digraph, "#")
+    return word
 
 
 def has_long_consonant_run(word, min_run=5):
     run = 0
-    for ch in word.lower():
-        if ch.isalpha() and ch not in VOWELS:
+    for ch in collapse_digraphs(word):
+        if ch == "#" or (ch.isalpha() and ch not in VOWELS):
             run += 1
             if run >= min_run:
                 return True
@@ -55,13 +73,14 @@ def is_gibberish(question):
     return any(has_long_consonant_run(word) for word in question.split())
 
 
-def answer_query(question, chat_client, embedding_client, verbose=True):
+def answer_query(question, chat_client, embedding_client, verbose=True, top_chunks=None):
     if not question.strip() or is_gibberish(question):
         answer = "I don't have that information."
         print(f"Answer: {answer}\n")
         return answer
 
-    top_chunks = get_top_chunks(question, embedding_client, k=3)
+    if top_chunks is None:
+        top_chunks = get_top_chunks(question, embedding_client, k=3)
 
     if verbose:
         print("[retrieved chunks]")
