@@ -1,5 +1,7 @@
 # Local RAG Assistant with Microsoft Foundry Local
 
+**Project is over.**
+
 A local, offline Q&A assistant built using Microsoft Foundry Local and Python, 
 following the Retrieval-Augmented Generation (RAG) pattern. Everything runs 
 on-device — no internet connection required after initial model downloads.
@@ -26,6 +28,55 @@ to a local LLM for grounded, source-based answers — with zero cloud dependency
 - **Python** — `foundry-local-sdk-winml`
 - **SQLite** (`sqlite3`, built-in) — local storage for document chunks + embeddings
 - Models used: `phi-3-mini-4k` (chat), `qwen3-embedding-0.6b` (embeddings)
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Docs["documents list\n(ingest.py)"] --> Chunk["chunk_text() /\nchunk_documents()"]
+    Chunk --> Embed["qwen3-embedding-0.6b\n(Foundry Local)"]
+    Embed --> DB[("knowledge.db\nSQLite: doc_index, content, embedding")]
+    DB --> Retrieve["get_top_chunks()\ncosine similarity (retrieve.py)"]
+    Retrieve --> Gate{"score >= 0.5?\nRELEVANCE_THRESHOLD"}
+    Gate -- no --> Fallback["I don't have that information."]
+    Gate -- yes --> Chat["phi-3-mini-4k\n(Foundry Local)"]
+    Chat --> Answer["Grounded answer"]
+    UI["CLI (main.py) /\nStreamlit (app.py)"] -.->|question| Retrieve
+    Answer -.-> UI
+    Fallback -.-> UI
+```
+
+Request flow, showing this project's two real gates - `is_gibberish()` and
+`RELEVANCE_THRESHOLD` - which is what actually makes this flow distinctive
+rather than a generic RAG diagram:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as CLI / Streamlit
+    participant Main as answer_query (main.py)
+    participant Retrieve as get_top_chunks (retrieve.py)
+    participant DB as knowledge.db
+
+    User->>UI: Ask a question
+    UI->>Main: answer_query(question)
+    Main->>Main: is_gibberish(question)?
+    alt gibberish or blank
+        Main-->>UI: "I don't have that information."
+    else looks like a real question
+        Main->>Retrieve: get_top_chunks(question)
+        Retrieve->>DB: SELECT content, embedding
+        Retrieve->>Retrieve: cosine_similarity() per row
+        Retrieve-->>Main: top-k (score, content)
+        alt best score below 0.5
+            Main-->>UI: "I don't have that information."
+        else best score at or above 0.5
+            Main->>Main: phi-3-mini-4k.complete_streaming_chat()
+            Main-->>UI: grounded answer
+        end
+    end
+    UI-->>User: Display result
+```
 
 ## Resources
 
