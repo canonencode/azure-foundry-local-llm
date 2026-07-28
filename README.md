@@ -344,6 +344,98 @@ verified after landing:
   limitation rather than fixed — implausible as real query vocabulary for
   this project, and no adjustment can fix them without reopening other cases
 
+### Extensive Bug Hunt & Hardening ✅
+User-requested paranoid pass: an independent background agent did a fresh
+static security/correctness audit of every file (not reusing any prior
+context), while live adversarial testing ran in parallel with real,
+malicious/malformed input against every non-trivial function. Every fix
+below was verified either by a live reproduction (a real corrupted DB row,
+a real missing `knowledge.db`, a real Turkish sentence) or a regression
+test, not just code review.
+
+**Confirmed clean by the audit — no fix needed:**
+- SQL injection: every query across the whole codebase uses `?` parameterized
+  placeholders; none interpolate values via f-string/`.format()`/`%`
+- XSS/HTML injection in `app.py`'s `unsafe_allow_html=True` blocks: none of
+  them interpolate user-controlled data (question, answer, retrieved
+  content) — only hardcoded CSS and trusted constants
+
+**Critical bugs found and fixed:**
+1. **Infinite loop in `chunk_text()`** on `max_chars <= 0` — confirmed live:
+   a test call hung, and `Get-Process` showed 160+ seconds of real CPU time
+   before it was killed. `sentence[:0]` is `""` and `sentence[0:]` is
+   unchanged, so the loop that's supposed to shrink an oversized "sentence"
+   never terminates. Fixed by validating `max_chars > 0` up front
+2. **`is_gibberish()` flagged all non-Latin-script text as gibberish** —
+   `VOWELS` is ASCII-only, so a Turkish/Cyrillic/Arabic/CJK sentence has zero
+   recognized vowels and gets rejected outright. Fixed by skipping the
+   consonant-run check entirely for any non-ASCII word (the heuristic only
+   models English orthography to begin with)
+3. **That same non-Latin text then crashed `print()` on Windows** —
+   `UnicodeEncodeError` from the console's default `cp1252` codepage,
+   discovered while adding a Turkish regression test. Without this fix,
+   fix #2 above would have been undermined immediately: the app would
+   correctly *accept* a Turkish question, then crash trying to echo it back.
+   Fixed by forcing UTF-8 stdout (`sys.stdout.reconfigure`) in every
+   CLI-facing script (`main.py`, `ingest.py`, `retrieve.py`, `check-db.py`,
+   `evaluate.py`)
+4. **One corrupted embedding row crashed retrieval for every question, not
+   just questions related to that row** — `retrieve.py`'s
+   `json.loads(embedding_str)` had no error isolation per row. Confirmed
+   live: inserted a real row with malformed JSON, watched `get_top_chunks()`
+   fail entirely, fixed it to skip and log just the bad row, re-ran and
+   confirmed the other 8 rows still returned correctly, then removed the
+   test row
+5. **Missing `knowledge.db`/table crashed `app.py`, `retrieve.py`, and
+   `check-db.py` with raw tracebacks** — confirmed live by actually deleting
+   `knowledge.db` and re-running each; all three now show a clear "run
+   `python ingest.py` first" message instead. Backed up and restored the
+   real database around this test
+6. **No error handling around Foundry Local SDK calls** — a transient
+   failure (service not running, no internet on first model download) on
+   any single question crashed the entire CLI session or produced a raw
+   Streamlit traceback. `build_clients()` now wraps SDK initialization with
+   an actionable message; `main.py`'s CLI loop and `app.py`'s startup no
+   longer die from one bad interaction
+
+**Other real bugs found and fixed (lower severity, still real):**
+7. `chunk_text()` silently dropped internal periods when a long paragraph
+   got split on sentence boundaries and rejoined (`str.split(". ")` discards
+   the delimiter) — confirmed by reconstructing chunked text and diffing
+   against the original
+8. Windows line endings (`\r\n\r\n`) weren't recognized as paragraph breaks
+   (only `\n\n` was), so a document pasted from Notepad/Word would silently
+   fail to chunk by paragraph at all — this project is Windows-only, so this
+   was a realistic, not theoretical, gap
+9. `chunk_documents("a string")` would silently iterate character-by-character
+   instead of erroring, since strings are iterable — now raises `TypeError`
+10. `cosine_similarity()` silently truncated to the shorter vector on a
+    dimension mismatch via `zip()`, producing a plausible-looking but
+    meaningless score instead of surfacing that something upstream (a
+    corrupted row, mismatched embedding models) was already wrong
+11. `ingest.py` had no check that `generate_embeddings()` returned one
+    embedding per chunk in the right order — now aborts with a clear error
+    instead of risking a silent, permanent, undetectable content/embedding
+    mismatch in `knowledge.db`
+
+**New permanent regression coverage added to `evaluate.py`:** a Turkish
+sentence in `GIBBERISH_CHECKS` (bug #2/#3), and a new `check_chunking()`
+section covering the `max_chars` guard, period preservation, CRLF handling,
+and the string-vs-list type check (bugs #1, #7, #8, #9). Full suite re-run
+after every single fix: 10/10 end-to-end cases, 9/9 gibberish checks, 5/5
+chunking checks, throughout.
+
+**Noted but not fixed (lower priority, documented trade-offs):** an
+unguarded destructive `DELETE` in `ingest.py` if `chunks` ever comes out
+much shorter than expected (by design for the stale-row cleanup, but no
+confirmation prompt); `doc_index` fragility (editing an early document
+shifts every later chunk's index — not corrupting, just causes a full
+rewrite); DB connections not wrapped in `try/finally` (CPython's
+refcounting closes them anyway in these short-lived scripts); a narrow
+SQLite locking race if `ingest.py` runs while `app.py` is serving a request;
+`app.py`'s cached document count going stale if `ingest.py` re-runs against
+a live server (cosmetic only).
+
 ## Lessons Learned
 
 Pulling together the insights that are otherwise scattered across the weekly

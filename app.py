@@ -183,9 +183,15 @@ def get_clients():
 @st.cache_data
 def get_doc_count():
     conn = sqlite3.connect("knowledge.db")
-    count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    conn.close()
-    return count
+    try:
+        return conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    except sqlite3.OperationalError:
+        # No 'documents' table yet (ingest.py was never run) - 0 is a
+        # reasonable display value; the chat flow below surfaces a proper
+        # error if the user tries to ask a question before that's fixed.
+        return 0
+    finally:
+        conn.close()
 
 
 EXAMPLE_QUESTIONS = [
@@ -197,8 +203,12 @@ EXAMPLE_QUESTIONS = [
 if "history" not in st.session_state:
     st.session_state.history = []
 
-with st.spinner("Initializing local AI models (first run may take a moment)..."):
-    chat_client, embedding_client = get_clients()
+try:
+    with st.spinner("Initializing local AI models (first run may take a moment)..."):
+        chat_client, embedding_client = get_clients()
+except RuntimeError as exc:
+    st.error(f"Could not start: {exc}")
+    st.stop()
 
 # --- Sidebar -----------------------------------------------------------
 with st.sidebar:
@@ -271,16 +281,22 @@ if prompt:
     with st.chat_message("user", avatar="assets/user-avatar.svg"):
         st.write(prompt)
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            if not prompt.strip() or is_gibberish(prompt):
-                top_chunks = []
-            else:
-                top_chunks = get_top_chunks(prompt, embedding_client, k=3)
-            answer = answer_query(prompt, chat_client, embedding_client, verbose=False, top_chunks=top_chunks)
-        st.write(answer)
-    st.session_state.history.append({
-        "question": prompt,
-        "answer": answer,
-        "chunks": top_chunks,
-    })
-    st.rerun()
+        try:
+            with st.spinner("Thinking..."):
+                if not prompt.strip() or is_gibberish(prompt):
+                    top_chunks = []
+                else:
+                    top_chunks = get_top_chunks(prompt, embedding_client, k=3)
+                answer = answer_query(prompt, chat_client, embedding_client, verbose=False, top_chunks=top_chunks)
+        except RuntimeError as exc:
+            # e.g. knowledge.db has no data yet - show a clear message
+            # instead of a raw traceback, and don't add a failed turn to history
+            st.error(f"Couldn't answer that: {exc}")
+        else:
+            st.write(answer)
+            st.session_state.history.append({
+                "question": prompt,
+                "answer": answer,
+                "chunks": top_chunks,
+            })
+            st.rerun()

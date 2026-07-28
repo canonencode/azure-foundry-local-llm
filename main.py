@@ -1,6 +1,14 @@
 # Week 4 - App assembly: retrieval-augmented Q&A CLI over the local knowledge base
 # .\venv\Scripts\Activate.ps1
 
+import sys
+# Windows' default console codepage (cp1252/cp437) can't encode most
+# non-Latin text (Cyrillic, Arabic, CJK, or Turkish "i"-with-no-dot) -
+# printing a question/answer containing it would crash with
+# UnicodeEncodeError otherwise, found while testing is_gibberish() below
+# with real non-English input.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from foundry_local_sdk import Configuration, FoundryLocalManager
 from retrieve import get_top_chunks
 
@@ -18,22 +26,33 @@ SYSTEM_PROMPT = (
 
 
 def build_clients():
-    config = Configuration(app_name="azure-foundry-local-llm")
-    FoundryLocalManager.initialize(config)
-    manager = FoundryLocalManager.instance
+    try:
+        config = Configuration(app_name="azure-foundry-local-llm")
+        FoundryLocalManager.initialize(config)
+        manager = FoundryLocalManager.instance
 
-    chat_model = manager.catalog.get_model("phi-3-mini-4k")
-    chat_model.download(lambda p: print(f"\rDownloading chat model: {p:.1f}%", end="", flush=True))
-    print()
-    chat_model.load()
-    chat_client = chat_model.get_chat_client()
+        chat_model = manager.catalog.get_model("phi-3-mini-4k")
+        chat_model.download(lambda p: print(f"\rDownloading chat model: {p:.1f}%", end="", flush=True))
+        print()
+        chat_model.load()
+        chat_client = chat_model.get_chat_client()
 
-    embedding_model = manager.catalog.get_model("qwen3-embedding-0.6b")
-    embedding_model.download(lambda p: print(f"\rDownloading embedding model: {p:.1f}%", end="", flush=True))
-    print()
-    embedding_model.load()
+        embedding_model = manager.catalog.get_model("qwen3-embedding-0.6b")
+        embedding_model.download(lambda p: print(f"\rDownloading embedding model: {p:.1f}%", end="", flush=True))
+        print()
+        embedding_model.load()
 
-    return chat_client, embedding_model.get_embedding_client()
+        return chat_client, embedding_model.get_embedding_client()
+    except Exception as exc:
+        # Wrap whatever the SDK raised (service not running, no internet on
+        # first download, model missing) with an actionable message instead
+        # of a raw multi-frame SDK traceback. `from exc` keeps the original
+        # cause attached, it isn't swallowed.
+        raise RuntimeError(
+            "Could not initialize Foundry Local models. Check that Foundry "
+            "Local is installed and running, and that you have an internet "
+            f"connection for the first-time model download. Underlying error: {exc}"
+        ) from exc
 
 
 # "y" counts as a vowel here to avoid false positives on real words like
@@ -58,6 +77,14 @@ def collapse_digraphs(word):
 
 
 def has_long_consonant_run(word, min_run=5):
+    if not word.isascii():
+        # VOWELS/DIGRAPHS only model English orthography. Applying this
+        # check to non-ASCII scripts (Cyrillic, Arabic, CJK, or Latin text
+        # with diacritics like Turkish "i"/"g"/"s"/"c"/"o"/"u" variants)
+        # would flag ordinary foreign-language words as gibberish, since
+        # none of those characters are in VOWELS - confirmed empirically:
+        # a plain Turkish sentence was misflagged before this check existed.
+        return False
     run = 0
     for ch in collapse_digraphs(word):
         if ch == "#" or (ch.isalpha() and ch not in VOWELS):
@@ -121,7 +148,13 @@ def main():
             break
         if not question:
             continue
-        answer_query(question, chat_client, embedding_client)
+        try:
+            answer_query(question, chat_client, embedding_client)
+        except RuntimeError as exc:
+            # A transient failure on one question (e.g. missing knowledge.db,
+            # a dropped connection to the model) shouldn't kill the whole
+            # session - report it and let the user try again or exit.
+            print(f"\nSomething went wrong answering that: {exc}\n")
 
 
 if __name__ == "__main__":

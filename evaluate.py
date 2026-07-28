@@ -3,8 +3,16 @@
 # each one, and report whether the behavior matched what was expected.
 # .\venv\Scripts\Activate.ps1
 
+import sys
 import time
+
+# See main.py for why this is needed - printing non-Latin test input
+# (e.g. the Turkish GIBBERISH_CHECKS case below) would otherwise crash
+# with UnicodeEncodeError on Windows' default console codepage.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from main import build_clients, answer_query, is_gibberish
+from ingest import chunk_text, chunk_documents
 
 FALLBACK_TEXT = "I don't have that information."
 
@@ -28,6 +36,10 @@ GIBBERISH_CHECKS = [
     ("asdkjhaskjdh", True),
     ("ajksnfkasnds", True),
     ("sadjknd", True),
+    # Non-ASCII scripts (Cyrillic, Arabic, CJK, or Latin-with-diacritics like
+    # Turkish) have no characters in VOWELS, so every word in them used to
+    # get flagged as gibberish - found during a full adversarial test pass.
+    ("Bu bir Türkçe cümledir ve gayet anlamlıdır", False),
 ]
 
 
@@ -40,6 +52,51 @@ def check_is_gibberish():
             passed += 1
         print(f"[{status}] is_gibberish({word!r}) = {got} (expected {expected})")
     print(f"{passed}/{len(GIBBERISH_CHECKS)} gibberish-detector checks passed\n")
+    return passed
+
+
+# Direct unit checks on ingest.py's chunk_text()/chunk_documents(), covering
+# real bugs found during an adversarial test pass: an infinite loop on
+# non-positive max_chars, silently dropped periods when a long paragraph
+# gets split and rejoined, Windows line endings not being recognized as
+# paragraph breaks, and a string being silently mis-chunked character-by-
+# character instead of erroring when passed where a list was expected.
+CHUNKING_CHECKS = [
+    ("no positive max_chars", lambda: _expect_raises(ValueError, chunk_text, "text", max_chars=0)),
+    ("negative max_chars", lambda: _expect_raises(ValueError, chunk_text, "text", max_chars=-5)),
+    ("periods preserved through split+rejoin",
+     lambda: chunk_text("Alpha beta gamma. Delta epsilon zeta. Eta theta iota.", max_chars=25) and
+             " ".join(chunk_text("Alpha beta gamma. Delta epsilon zeta. Eta theta iota.", max_chars=25))
+             == "Alpha beta gamma. Delta epsilon zeta. Eta theta iota."),
+    ("CRLF paragraph breaks recognized",
+     lambda: len(chunk_text("Para one.\r\n\r\nPara two.\r\n\r\nPara three.")) == 3),
+    ("chunk_documents rejects a bare string",
+     lambda: _expect_raises(TypeError, chunk_documents, "not a list")),
+]
+
+
+def _expect_raises(exc_type, func, *args, **kwargs):
+    try:
+        func(*args, **kwargs)
+        return False
+    except exc_type:
+        return True
+
+
+def check_chunking():
+    passed = 0
+    for name, test in CHUNKING_CHECKS:
+        try:
+            ok = bool(test())
+        except Exception as exc:
+            ok = False
+            print(f"[FAIL] {name} -> unexpected exception: {exc!r}")
+            continue
+        status = "PASS" if ok else "FAIL"
+        if ok:
+            passed += 1
+        print(f"[{status}] {name}")
+    print(f"{passed}/{len(CHUNKING_CHECKS)} chunking checks passed\n")
     return passed
 
 # expect: "answer" -> should be grounded in the knowledge base, not the fallback
@@ -71,6 +128,9 @@ def check(question, answer, expect):
 def main():
     print("=== Gibberish detector unit checks ===")
     check_is_gibberish()
+
+    print("=== Chunking unit checks ===")
+    check_chunking()
 
     chat_client, embedding_client = build_clients()
 

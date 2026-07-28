@@ -1,13 +1,25 @@
 # Week 3 - Retrieval function: embed a query and find the most relevant stored chunks
 # .\venv\Scripts\Activate.ps1
 
+import sys
 import sqlite3
 import json
 import math
 from foundry_local_sdk import Configuration, FoundryLocalManager
 
+# See main.py for why this is needed - non-Latin document content would
+# otherwise crash on print() with UnicodeEncodeError on Windows' default
+# console codepage.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def cosine_similarity(a, b):
+    if len(a) != len(b):
+        # zip() would otherwise silently truncate to the shorter vector and
+        # return a plausible-looking but meaningless number - fail loudly
+        # instead, since mismatched dimensions mean something upstream (a
+        # corrupted row, a mixed embedding model) is already wrong.
+        raise ValueError(f"Vector dimension mismatch: {len(a)} vs {len(b)}")
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
@@ -33,15 +45,28 @@ def get_top_chunks(query, embedding_client, k=3):
     query_embedding = query_response.data[0].embedding
 
     conn = sqlite3.connect("knowledge.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT content, embedding FROM documents")
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT content, embedding FROM documents")
+        rows = cursor.fetchall()
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError(
+            "knowledge.db has no 'documents' table yet - run 'python ingest.py' first."
+        ) from exc
+    finally:
+        conn.close()
 
     scored = []
     for content, embedding_str in rows:
-        embedding = json.loads(embedding_str)
-        score = cosine_similarity(query_embedding, embedding)
+        # A single corrupted row (NULL/malformed embedding JSON, wrong
+        # dimensions from a partial write) shouldn't take down retrieval
+        # for every other document - skip just that row and keep going.
+        try:
+            embedding = json.loads(embedding_str)
+            score = cosine_similarity(query_embedding, embedding)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            print(f"Skipping corrupted row ({content[:50]!r}...): {exc}")
+            continue
         scored.append((score, content))
 
     scored.sort(key=lambda pair: pair[0], reverse=True)
