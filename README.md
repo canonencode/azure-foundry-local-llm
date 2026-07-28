@@ -31,51 +31,34 @@ to a local LLM for grounded, source-based answers — with zero cloud dependency
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    Docs["documents list\n(ingest.py)"] --> Chunk["chunk_text() /\nchunk_documents()"]
-    Chunk --> Embed["qwen3-embedding-0.6b\n(Foundry Local)"]
-    Embed --> DB[("knowledge.db\nSQLite: doc_index, content, embedding")]
-    DB --> Retrieve["get_top_chunks()\ncosine similarity (retrieve.py)"]
-    Retrieve --> Gate{"score >= 0.5?\nRELEVANCE_THRESHOLD"}
-    Gate -- no --> Fallback["I don't have that information."]
-    Gate -- yes --> Chat["phi-3-mini-4k\n(Foundry Local)"]
-    Chat --> Answer["Grounded answer"]
-    UI["CLI (main.py) /\nStreamlit (app.py)"] -.->|question| Retrieve
-    Answer -.-> UI
-    Fallback -.-> UI
+The two gates below (gibberish check, relevance threshold) are what make this
+pipeline different from a plain "embed, retrieve, answer" loop - both exist
+because testing showed the chat model won't reliably refuse on its own.
+
 ```
-
-Request flow, showing this project's two real gates - `is_gibberish()` and
-`RELEVANCE_THRESHOLD` - which is what actually makes this flow distinctive
-rather than a generic RAG diagram:
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as CLI / Streamlit
-    participant Main as answer_query (main.py)
-    participant Retrieve as get_top_chunks (retrieve.py)
-    participant DB as knowledge.db
-
-    User->>UI: Ask a question
-    UI->>Main: answer_query(question)
-    Main->>Main: is_gibberish(question)?
-    alt gibberish or blank
-        Main-->>UI: "I don't have that information."
-    else looks like a real question
-        Main->>Retrieve: get_top_chunks(question)
-        Retrieve->>DB: SELECT content, embedding
-        Retrieve->>Retrieve: cosine_similarity() per row
-        Retrieve-->>Main: top-k (score, content)
-        alt best score below 0.5
-            Main-->>UI: "I don't have that information."
-        else best score at or above 0.5
-            Main->>Main: phi-3-mini-4k.complete_streaming_chat()
-            Main-->>UI: grounded answer
-        end
-    end
-    UI-->>User: Display result
+  question (CLI in main.py, or Streamlit in app.py)
+      |
+      v
+  is_gibberish(question)?  --- yes --> "I don't have that information." (main.py)
+      | no
+      v
+  qwen3-embedding-0.6b.embed(question)                       (Foundry Local)
+      |
+      v
+  get_top_chunks(): cosine_similarity() against every row     (retrieve.py)
+  in knowledge.db  [doc_index | content | embedding]          (ingest.py builds
+      |                                                        this table via
+      v                                                        chunk_text())
+  best score >= RELEVANCE_THRESHOLD (0.5)?
+      |                        |
+      | no                     | yes
+      v                        v
+  "I don't have               phi-3-mini-4k.complete_streaming_chat()
+   that information."          (context = joined top chunks)   (Foundry Local)
+      |                        |
+      +----------+-------------+
+                 v
+         streamed back to the CLI / Streamlit UI
 ```
 
 ## Resources
