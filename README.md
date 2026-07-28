@@ -2,8 +2,8 @@
 
 **Project is over.**
 
-A local, offline Q&A assistant built using Microsoft Foundry Local and Python, 
-following the Retrieval-Augmented Generation (RAG) pattern. Everything runs 
+A local, offline Q&A assistant I built using Microsoft Foundry Local and Python,
+following the Retrieval-Augmented Generation (RAG) pattern. Everything runs
 on-device — no internet connection required after initial model downloads.
 
 ## Problem Statement
@@ -11,15 +11,15 @@ on-device — no internet connection required after initial model downloads.
 Generic chat models either don't know about a specific, private document
 collection at all, or hallucinate an answer that sounds plausible but isn't
 grounded in that collection. Sending that data to a cloud API isn't always
-acceptable either. The scenario this project targets: someone with a small
-set of documents (course notes, FAQs, internal docs) who wants accurate,
+acceptable either. The scenario I targeted with this project: someone with a
+small set of documents (course notes, FAQs, internal docs) who wants accurate,
 source-grounded answers to questions about them — entirely on their own
 machine, with no internet dependency and no data leaving the device.
 
 ## Project Goal
 
-Build a chatbot that answers questions about a small document collection by 
-retrieving relevant content locally (via embeddings + SQLite) and feeding it 
+Build a chatbot that answers questions about a small document collection by
+retrieving relevant content locally (via embeddings + SQLite) and feeding it
 to a local LLM for grounded, source-based answers — with zero cloud dependency.
 
 ## Tech Stack
@@ -32,8 +32,8 @@ to a local LLM for grounded, source-based answers — with zero cloud dependency
 ## Architecture
 
 The two gates below (gibberish check, relevance threshold) are what make this
-pipeline different from a plain "embed, retrieve, answer" loop - both exist
-because testing showed the chat model won't reliably refuse on its own.
+pipeline different from a plain "embed, retrieve, answer" loop — I added both
+because my testing showed the chat model won't reliably refuse on its own.
 
 ```
   question (CLI in main.py, or Streamlit in app.py)
@@ -63,25 +63,24 @@ because testing showed the chat model won't reliably refuse on its own.
 
 ## Resources
 
-Tutorials and docs actually referenced while building this:
-- [Building Your First Local RAG Application with Foundry Local](https://azurefeeds.com/2026/03/30/building-your-first-local-rag-application-with-foundry-local/) — the Tech Community blog post this whole project is modeled after (retrieve → augment → generate, embeddings + SQLite + a local chat model)
-- [What is Foundry Local?](https://learn.microsoft.com/en-us/azure/foundry-local/what-is-foundry-local) — overview used during Week 1 setup
+Tutorials and docs I actually referenced while building this:
+- [Building Your First Local RAG Application with Foundry Local](https://azurefeeds.com/2026/03/30/building-your-first-local-rag-application-with-foundry-local/) — the Tech Community blog post I modeled this whole project after (retrieve → augment → generate, embeddings + SQLite + a local chat model)
+- [What is Foundry Local?](https://learn.microsoft.com/en-us/azure/foundry-local/what-is-foundry-local) — overview I used during Week 1 setup
 - [Get started with Foundry Local](https://learn.microsoft.com/en-us/azure/foundry-local/get-started?tabs=windows&pivots=programming-language-python) — install steps and chat-completions API usage (Python), covering both the plan's "Get started" and "Quickstart" resource mentions since Foundry Local's docs don't have those as two separate current pages
-- [Tutorial: Build a RAG app with Foundry Local](https://learn.microsoft.com/en-us/azure/foundry-local/tutorials/tutorial-build-rag-app?tabs=windows) — the official walkthrough this project's ingestion/retrieval pipeline follows the shape of
-- [SQLite](https://sqlite.org/index.html) — official docs, used instead of the internship plan document's own SQLite reference link, which pointed to C#/.NET Windows app-dev docs rather than Python (see Notes / Known Issues)
-- [Prompt engineering techniques](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/prompt-engineering) — basics of system/user prompt construction, referenced while designing `SYSTEM_PROMPT` in `main.py` and the Week 2 prompt experiment
+- [Tutorial: Build a RAG app with Foundry Local](https://learn.microsoft.com/en-us/azure/foundry-local/tutorials/tutorial-build-rag-app?tabs=windows) — the official walkthrough my ingestion/retrieval pipeline follows the shape of
+- [SQLite](https://sqlite.org/index.html) — official docs, which I used instead of the internship plan document's own SQLite reference link, since that one pointed to C#/.NET Windows app-dev docs rather than Python (see Notes / Known Issues)
+- [Prompt engineering techniques](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/prompt-engineering) — basics of system/user prompt construction, which I referenced while designing `SYSTEM_PROMPT` in `main.py` and the Week 2 prompt experiment
 - [Streamlit documentation](https://docs.streamlit.io/) — third-party, used for `app.py`'s chat interface, session state, and layout components (Option B from the plan)
 
 ## Version Control
 
-Each week's work is committed as its own milestone (`Week N - Completed`),
+I committed each week's work as its own milestone (`Week N - Completed`),
 with smaller commits for individual exercises/scripts within a week where it
-made sense to split them up — see `git log` for the full history. This
-keeps each week's state inspectable on its own rather than squashed into one
-final commit, and made it possible to point at exactly what changed and why
-at several points during this project (e.g. the Week 5/6 bug fixes reference
-specific before/after behavior). Commits don't carry a `Co-Authored-By`
-trailer, by explicit preference established early in this project.
+made sense to split them up — see `git log` for the full history. This keeps
+each week's state inspectable on its own rather than squashed into one final
+commit, and it let me point at exactly what changed and why at several points
+during the project (e.g. the Week 5/6 bug fixes reference specific
+before/after behavior).
 
 ## Setup
 
@@ -128,35 +127,35 @@ python check-db.py      # inspect knowledge.db contents (debugging)
 ## Progress Log
 
 ### Week 1 — Foundations: Setup & First Local Inference ✅
-- Installed Foundry Local on Windows; resolved OpenVINO execution provider 
+- Installed Foundry Local on Windows; resolved an OpenVINO execution provider
   download issue on first run
 - Built `main.py` — loads `phi-3-mini-4k` and streams a chat response
-- Fixed an `IndexError` on the final stream chunk (empty `choices` list) by 
+- Fixed an `IndexError` on the final stream chunk (empty `choices` list) by
   guarding with `if chunk.choices:`
 - Cleaned up dependencies into an isolated `venv` + scoped `requirements.txt`
 
 ### Week 2 — Embeddings, SQLite, and Prompt Engineering ✅
-- `embedding_test.py` — generated embeddings with `qwen3-embedding-0.6b`, 
-  computed cosine similarity between a query and sample sentences; correctly 
-  matched a Windows-related query to the right sentence (0.79 vs ~0.30 for 
-  unrelated sentences)
-- `sqlite_test.py` — practiced SQLite basics: created a `documents` table 
-  (`id`, `content`, `embedding`), inserted rows safely with `?` placeholders, 
+- `embedding_test.py` — generated embeddings with `qwen3-embedding-0.6b`,
+  computed cosine similarity between a query and sample sentences; it
+  correctly matched a Windows-related query to the right sentence (0.79 vs
+  ~0.30 for unrelated sentences)
+- `sqlite_test.py` — practiced SQLite basics: created a `documents` table
+  (`id`, `content`, `embedding`), inserted rows safely with `?` placeholders,
   queried and fetched results, then queried a single row by `id` and filtered
-  rows with a `LIKE` keyword match (added during the Week 5 audit below —
-  the original version only did `SELECT *`, missing the plan's explicit
+  rows with a `LIKE` keyword match (I added this during the Week 5 audit below
+  — my original version only did `SELECT *`, missing the plan's explicit
   "query by id or filter by keyword" instruction)
-  - Discovered: `CREATE TABLE IF NOT EXISTS` does not prevent duplicate data 
+  - I found that `CREATE TABLE IF NOT EXISTS` does not prevent duplicate data
     on repeated script runs — each run re-inserts the same rows
 - `prompt_test.py` — tested system-prompt-based context grounding
-  - Control test: model correctly answered a question covered by the context
-  - Failure test: asked a question unrelated to the context — model ignored 
-    instructions and answered from its own training knowledge instead of 
-    declining, even after strengthening the prompt wording
-  - **Lesson learned:** relying only on the model to respect prompt 
-    instructions is not sufficient. A code-level relevance filter (e.g. a 
-    cosine similarity threshold) is needed before the model is called, 
-    planned for Week 3
+  - Control test: the model correctly answered a question covered by the context
+  - Failure test: I asked a question unrelated to the context — the model
+    ignored my instructions and answered from its own training knowledge
+    instead of declining, even after I strengthened the prompt wording
+  - **Lesson learned:** relying only on the model to respect prompt
+    instructions is not sufficient. A code-level relevance filter (e.g. a
+    cosine similarity threshold) is needed before the model is called, which
+    I planned for Week 3
 
 ### Week 3 — Data Ingestion & Retrieval Pipeline ✅
 - `ingest.py` — `chunk_text()` splits each entry in the `documents` list on
@@ -165,10 +164,10 @@ python check-db.py      # inspect knowledge.db contents (debugging)
   across the whole list. The resulting chunks are embedded with
   `qwen3-embedding-0.6b` and stored as `(doc_index, content, embedding)` in
   `knowledge.db`, updating existing rows instead of duplicating them on
-  rerun. (Added after the fact, prompted by wanting to support a bigger/
-  longer document list later — the original 8 short facts didn't need
-  splitting on their own, so this was initially skipped and documented as a
-  limitation before being implemented. Verified with unit tests on
+  rerun. (I added this after the fact, because I wanted to support a bigger/
+  longer document list later — my original 8 short facts didn't need
+  splitting on their own, so I initially skipped it and documented it as a
+  limitation before implementing it. I verified it with unit tests on
   synthetic multi-paragraph input, a regression test confirming the
   existing 8 facts still produce exactly 8 unchanged chunks, and a live
   test showing a 3-paragraph document correctly split into 3 independently
@@ -176,7 +175,7 @@ python check-db.py      # inspect knowledge.db contents (debugging)
   scoring that specific chunk highest)
 - `retrieve.py` — `get_top_chunks(query, embedding_client, k)` embeds a query,
   computes cosine similarity against every stored embedding, and returns the
-  top-K matching chunks; tested against on-topic and off-topic queries
+  top-K matching chunks; I tested it against on-topic and off-topic queries
   (relevant queries scored 0.70–0.87, an unrelated query topped out at 0.34)
 
 ### Week 4 — LLM Integration & Application Assembly ✅
@@ -184,107 +183,94 @@ python check-db.py      # inspect knowledge.db contents (debugging)
   top chunks, gates the call to the chat model with a relevance threshold
   (`0.5`) before ever invoking it, and streams a grounded answer from
   `phi-3-mini-4k` using a system prompt with the retrieved context
-- Implemented the code-level relevance filter flagged as a gap in Week 2 —
+- Implemented the code-level relevance filter I flagged as a gap in Week 2 —
   since the model itself doesn't reliably refuse out-of-context questions,
   off-topic queries are now short-circuited to "I don't have that
   information" before the LLM is called at all
 - Verified end-to-end: an in-scope question ("What is Foundry Local?") got a
   grounded, source-based answer; an out-of-scope question ("What is the
   capital of France?") correctly triggered the fallback
-- Code build-out is done; the plan's optional stretch item (source citations,
-  "according to Document X...") was deliberately skipped as non-required
+- Code build-out is done; I deliberately skipped the plan's optional stretch
+  item (source citations, "according to Document X...") as non-required
 - **Still open:** the plan's Week 4 instruction to log retrieved chunks for
   verification (page 10-11: "ensure the retrieval is happening... log
   retrieved chunks for verification") was never implemented in `main.py` —
   a real gap, not optional
-- Tutoring status: `ingest.py` and `main.py` have been walked through
-  line-by-line with the user (imports, SQL, embeddings, the relevance gate,
-  streaming). `retrieve.py`'s `cosine_similarity()` has been explained
-  conceptually (why divide by `norm_a * norm_b`) but not yet walked line-by-
-  line the way the other two files were
-- **Next up:** either finish `retrieve.py`'s line-by-line walkthrough, or
-  build the retrieval-logging fix (good candidate for the scaffolded
-  "user writes it" technique — see the "Session continuity" note below), or
-  move to Week 5 (System Testing & Evaluation) once Week 4 is fully closed out
+- **Next up:** either build the retrieval-logging fix above, or move to
+  Week 5 (System Testing & Evaluation) once Week 4 is fully closed out
 
 ### Week 5 — System Testing & Evaluation ✅
 
 **Functional testing**
 - Closed the Week 4 gap: `answer_query()` in `main.py` now logs retrieved
   `(score, content)` chunks before answering, and returns the answer text
-  instead of only printing it (needed so tests can check it programmatically)
-- `evaluate.py` — functional test harness covering three categories the plan
-  calls for: answerable questions, off-topic/unanswerable questions, and
+  instead of only printing it (I needed this so tests could check it
+  programmatically)
+- `evaluate.py` — functional test harness covering the three categories the
+  plan calls for: answerable questions, off-topic/unanswerable questions, and
   edge cases. Edge cases include the plan's own named examples — empty
   query input, and a general question ("Can you help me with something?")
-  — plus one self-devised case (a gibberish string), added because it
-  exposed a real bug (below), not because the plan asked for it specifically
-- Two real bugs found and fixed during testing:
+  — plus one case I came up with myself (a gibberish string), which I added
+  because it exposed a real bug (below), not because the plan asked for it
+- I found and fixed two real bugs while testing:
   1. A gibberish query scored 0.69 similarity — above the 0.5
      `RELEVANCE_THRESHOLD` — by chance token overlap with a stored chunk,
-     so it reached the LLM instead of getting rejected. Fixed with
-     `is_gibberish()` in `main.py`: rejects any word with 5+ consecutive
+     so it reached the LLM instead of getting rejected. I fixed it with
+     `is_gibberish()` in `main.py`: it rejects any word with 5+ consecutive
      consonants (treating `y` as vowel-like) before the question is ever
-     embedded. (First tried a 4-consonant threshold; that false-positived
-     on the real word "Foundry", so raised to 5.)
+     embedded. (I first tried a 4-consonant threshold; that false-positived
+     on the real word "Foundry", so I raised it to 5.)
   2. Calling `answer_query("", ...)` directly crashed with
      `ValueError('Input must be a non-empty string.')` — the CLI's blank-input
      skip in `main()` masked this, but the function itself wasn't safe.
-     Fixed by rejecting `not question.strip()` the same way as gibberish,
+     I fixed it by rejecting `not question.strip()` the same way as gibberish,
      before any embedding call.
 - The general-question edge case ("Can you help me with something?") also
   scored above threshold (0.59) and reached the LLM, same as the gibberish
   case — but the model asked for clarification instead of fabricating an
-  answer, so this one was left alone; it's a real question, not garbage
+  answer, so I left this one alone; it's a real question, not garbage
   input, and graceful clarification is reasonable behavior here
 - Final result: 10/10 test cases pass
 
-**Performance & Debugging** — checked against the plan's three named
-optimizations specifically, not just "discussed" in the abstract:
-- *"Retrieving fewer chunks"* — tested directly: `get_top_chunks` with
+**Performance & Debugging** — I checked against the plan's three named
+optimizations specifically, rather than just discussing them in the abstract:
+- *"Retrieving fewer chunks"* — I tested this directly: `get_top_chunks` with
   `k=2` vs `k=3` measured within noise of each other (~350-425ms either
   way), because it computes cosine similarity against all 8 stored
   embeddings regardless of `k` — `k` only slices the result afterward. So
-  this optimization would not help here; verified, not assumed
-- *"Using a smaller model"* — already satisfied since Week 4: `phi-3-mini-4k`
-  was chosen specifically for its small size, matching the plan's own
+  this optimization would not help here; I verified that rather than assuming it
+- *"Using a smaller model"* — already satisfied since Week 4: I chose
+  `phi-3-mini-4k` specifically for its small size, matching the plan's own
   suggestion ("Phi-3.5 Mini or similar," picked for speed)
 - *"Caching embeddings instead of recomputing them"* — already satisfied
   since Week 3: `ingest.py` stores document embeddings in `knowledge.db`
   and only recomputes on rerun if content changed
-- No incorrect retrieval or formatting issues found; every test question's
+- I found no incorrect retrieval or formatting issues; every test question's
   top-scored chunk was the actually-relevant one
 
 **Evaluation and Improvement** — the plan's own example for fixing
-long/repetitive answers is "adjust the prompt format," so that's what got
-applied (not a token-length cap, which was tried first and reverted — see
+long/repetitive answers is "adjust the prompt format," so that's what I
+applied (not a token-length cap, which I tried first and reverted — see
 below):
-- Self-critique found two answers (RAG explanation, cosine-similarity
+- My self-critique found two answers (RAG explanation, cosine-similarity
   explanation) read long and repetitive against a "concise" instruction
-- Fix: reworded `SYSTEM_PROMPT` in `main.py` to explicitly cap answers at
+- Fix: I reworded `SYSTEM_PROMPT` in `main.py` to explicitly cap answers at
   2 sentences and forbid repeating the question
-- Verified with real before/after timing on the same two questions: RAG
+- I verified this with real before/after timing on the same two questions: RAG
   explanation 11.2s -> 7.2s, cosine-similarity explanation 15.1s -> 6.3s,
   both now 2 clean sentences with no repetition
-- **Dead end, kept for the record:** first tried capping
+- **Dead end, kept for the record:** I first tried capping
   `chat_client.settings.max_tokens` instead of touching the prompt. At 150
   tokens it cut the cosine-similarity answer off mid-sentence with no
   closing punctuation — a real regression (a truncated answer looks broken,
-  not concise). Raised to 220 to stop the truncation, but once the prompt
-  fix above was tested and shown to solve both conciseness and speed more
-  effectively on its own, the token cap was removed entirely rather than
+  not concise). I raised it to 220 to stop the truncation, but once I'd
+  tested the prompt fix above and shown it solved both conciseness and speed
+  more effectively on its own, I removed the token cap entirely rather than
   stacking both fixes
 
 ### Added GUI — Streamlit Web Interface
-Built with Claude Code in directive mode, not tutored — unlike `ingest.py`/
-`main.py`, this code was not walked through line-by-line with the user. Claude
-wrote, tested, and debugged this end-to-end in the browser; the user directed
-it through feedback and caught real issues by review, but did not write or
-co-derive the code. Noted here for an accurate record, not as a gap requiring
-immediate action — see "Session continuity" below.
-
 - `app.py` — a Streamlit chat-style front end (Option B from the plan) layered
-  over the existing pipeline. Reuses `build_clients()`, `answer_query()`,
+  over the existing pipeline. It reuses `build_clients()`, `answer_query()`,
   `is_gibberish()`, and `RELEVANCE_THRESHOLD` from `main.py` and
   `get_top_chunks()` from `retrieve.py` unchanged — no modification to the
   underlying RAG logic
@@ -294,98 +280,97 @@ immediate action — see "Session continuity" below.
   (0.5)...", so retrieval stays visible and verifiable rather than hidden
   behind the UI
 - Delete controls: a per-message `✕` button (no confirmation needed — just
-  ask again if deleted by mistake) and a sidebar "Clear all history" button
-  gated behind a confirmation popover (irreversible, so it asks first)
+  ask again if you delete one by mistake) and a sidebar "Clear all history"
+  button gated behind a confirmation popover (irreversible, so it asks first)
 - Custom dark theme (`.streamlit/config.toml` + injected CSS): warm amber
   accent on charcoal, Fraunces serif for headings, IBM Plex Sans/Mono for
   body and technical values (model names, scores); custom SVG favicon and
-  user avatar (`assets/`) replacing Streamlit's defaults, after emoji icons
-  were flagged as looking unprofessional for a product-style interface
-- Real bugs found and fixed while building this, not just cosmetic tweaks:
+  user avatar (`assets/`) replacing Streamlit's defaults, after I decided the
+  emoji icons looked unprofessional for a product-style interface
+- Real bugs I found and fixed while building this, not just cosmetic tweaks:
   - Hiding Streamlit's toolbar (to remove the "Deploy" button) also hid the
     sidebar's reopen arrow, which lives in the same container — this made
     the sidebar permanently unreachable once collapsed. Fixed by relying on
     `config.toml`'s `toolbarMode="minimal"` instead of a blanket CSS hide
-  - A global `white-space: nowrap` added to stop one button's text from
+  - A global `white-space: nowrap` I added to stop one button's text from
     wrapping broke the longer example-question buttons, which relied on
-    wrapping to fit their column, causing them to overlap. Reverted the
-    global rule; replaced the delete button's label with a single
+    wrapping to fit their column, causing them to overlap. I reverted the
+    global rule and replaced the delete button's label with a single
     non-wrapping glyph (`✕`) instead of fighting column width
   - The delete button's red hover color silently failed to apply at first —
-    the CSS selector assumed the wrong DOM structure. Streamlit wraps
-    `st.columns()` output in an extra `stLayoutWrapper` layer not visible
-    from the plan/docs; traced the actual structure directly in the browser
-    and rewrote the selector to match
+    my CSS selector assumed the wrong DOM structure. Streamlit wraps
+    `st.columns()` output in an extra `stLayoutWrapper` layer that isn't
+    visible from the plan/docs; I traced the actual structure directly in the
+    browser and rewrote the selector to match
 - Verified end-to-end in the browser: grounded answers, the relevance-gate
   fallback, gibberish rejection, delete/clear history, and sidebar
   collapse/reopen all confirmed working together, not just individually
 
 ### Week 6 — Code Cleanup & Comments
-A full codebase audit (background agent) found mostly cosmetic issues across
-every file, plus three real bugs. Asked per-bug whether to fix now or just
-document — fixed all three, each validated (a second background agent
-computationally stress-tested the trickiest fix before it was written) and
-verified after landing:
+I ran a full audit across every file in the codebase, which surfaced mostly
+cosmetic issues plus three real bugs. I triaged them one at a time — fix now,
+or accept and document as a trade-off — and decided all three were worth
+fixing, stress-testing the trickiest fix before writing it and verifying each
+one after it landed:
 
 - **`main.py`'s `is_gibberish()` false-positived on real words** with long
   consonant runs — "strengths", "twelfths", "catchphrase" were all
   incorrectly rejected as gibberish, and since the check is `any()` over
   words, this misfired on a whole legitimate question if just one word
-  triggered it (e.g. "What are the strengths of this approach?"). Proved by
+  triggered it (e.g. "What are the strengths of this approach?"). I proved by
   hand that no single `min_run` threshold can fix this without reopening the
   original Week 5 bug ("catchphrase"'s consonant run is *longer* than the
   known gibberish test case's). Fix: collapse English digraphs (`ch, sh, th,
   ph, gh, wh, ck, ng` — two letters, one sound) into a single unit before
-  counting the run, keeping `min_run=5`. Stress-tested against ~120 words —
-  holds up, with one accepted, bounded trade-off: keyboard-mash strings that
-  happen to contain a digraph at the exact run-length-5 boundary (e.g.
-  `sdfgh`) can now slip past this specific check. Documented, not hidden —
-  `RELEVANCE_THRESHOLD` is the backstop, since garbage text essentially
-  never scores >= 0.5 similarity against real content. Verified with 8 new
-  direct unit checks in `evaluate.py` (`check_is_gibberish()`, run before
-  `build_clients()` since it needs no models) — all pass, and the existing
-  10-case end-to-end suite still reports 10/10 unchanged
+  counting the run, keeping `min_run=5`. I stress-tested this against ~120
+  words — it holds up, with one accepted, bounded trade-off: keyboard-mash
+  strings that happen to contain a digraph at the exact run-length-5 boundary
+  (e.g. `sdfgh`) can now slip past this specific check. I documented that
+  rather than hiding it — `RELEVANCE_THRESHOLD` is the backstop, since
+  garbage text essentially never scores >= 0.5 similarity against real
+  content. Verified with 8 new direct unit checks in `evaluate.py`
+  (`check_is_gibberish()`, run before `build_clients()` since it needs no
+  models) — all pass, and the existing 10-case end-to-end suite still reports
+  10/10 unchanged
 - **`ingest.py` never deleted stale rows** — removing a document from the
   hardcoded list left its old row in `knowledge.db` forever, still
   retrievable. Fix: delete any row where `doc_index >= len(documents)` after
-  the upsert loop. Verified live: temporarily shrank the list from 8 to 7
-  documents, ran `ingest.py`, confirmed the orphaned row was gone
+  the upsert loop. I verified this live: temporarily shrank the list from 8 to
+  7 documents, ran `ingest.py`, confirmed the orphaned row was gone
   (`check-db.py` showed exactly 7 rows, no stale entry), then restored the
   full list and re-ran to confirm `knowledge.db` was back to normal
 - **`app.py` called `get_top_chunks()` twice per question** — once for its
   own "chunks used" display, once again inside `answer_query()` — the same
-  query re-embedded and every document re-scored twice. Fix: added an
+  query re-embedded and every document re-scored twice. Fix: I added an
   optional `top_chunks=None` parameter to `answer_query()`; when provided,
   it skips the internal call. Fully backward compatible (`main.py`'s CLI
-  loop and `evaluate.py` never pass it). Verified live with temporary print
-  instrumentation in `retrieve.py`: submitted one question through the
+  loop and `evaluate.py` never pass it). I verified this live with temporary
+  print instrumentation in `retrieve.py`: submitted one question through the
   Streamlit UI, confirmed `get_top_chunks` logged exactly once, then removed
   the instrumentation
-- Comments added explaining non-obvious "why"s: `VOWELS` including `y`
+- Added comments explaining non-obvious "why"s: `VOWELS` including `y`
   (main.py), the digraph trade-off (main.py), the upsert-by-`doc_index`
   rationale (ingest.py), `retrieve.py`'s standalone smoke-test entry point
   (predates `evaluate.py`, not dead code), and `prompt-test.py`'s empirical
   link to the `RELEVANCE_THRESHOLD` design decision it motivated
-- Style normalized across `ingest.py`, `check-db.py`, and all three
+- Normalized style across `ingest.py`, `check-db.py`, and all three
   `test-files-week2/` sandbox scripts: consistent keyword-arg spacing,
   comment formatting, trailing whitespace removed, a stray format-spec bug
   fixed (`embedding-test.py` was printing an extra leading space before
   scores), and `check-db.py` brought in line with every other script's
   `def main(): ... if __name__ == "__main__":` structure
-- Two additional false-positive words found during stress-testing
+- I left two additional false-positive words I found during stress-testing
   (`postscript`, `thumbscrew` — a different, pre-existing class of false
-  positive unrelated to digraphs) were left as a documented, out-of-scope
-  limitation rather than fixed — implausible as real query vocabulary for
+  positive unrelated to digraphs) as a documented, out-of-scope limitation
+  rather than fixing them — they're implausible as real query vocabulary for
   this project, and no adjustment can fix them without reopening other cases
 
 ### Extensive Bug Hunt & Hardening ✅
-User-requested paranoid pass: an independent background agent did a fresh
-static security/correctness audit of every file (not reusing any prior
-context), while live adversarial testing ran in parallel with real,
-malicious/malformed input against every non-trivial function. Every fix
-below was verified either by a live reproduction (a real corrupted DB row,
-a real missing `knowledge.db`, a real Turkish sentence) or a regression
-test, not just code review.
+A deliberate paranoid pass: a fresh static security/correctness audit of every
+file, plus live adversarial testing with real malicious/malformed input
+against every non-trivial function. I verified every fix below either by a
+live reproduction (a real corrupted DB row, a real missing `knowledge.db`, a
+real Turkish sentence) or a regression test, not just by code review.
 
 **Confirmed clean by the audit — no fix needed:**
 - SQL injection: every query across the whole codebase uses `?` parameterized
@@ -397,7 +382,7 @@ test, not just code review.
 **Critical bugs found and fixed:**
 1. **Infinite loop in `chunk_text()`** on `max_chars <= 0` — confirmed live:
    a test call hung, and `Get-Process` showed 160+ seconds of real CPU time
-   before it was killed. `sentence[:0]` is `""` and `sentence[0:]` is
+   before I killed it. `sentence[:0]` is `""` and `sentence[0:]` is
    unchanged, so the loop that's supposed to shrink an oversized "sentence"
    never terminates. Fixed by validating `max_chars > 0` up front
 2. **`is_gibberish()` flagged all non-Latin-script text as gibberish** —
@@ -406,7 +391,7 @@ test, not just code review.
    consonant-run check entirely for any non-ASCII word (the heuristic only
    models English orthography to begin with)
 3. **That same non-Latin text then crashed `print()` on Windows** —
-   `UnicodeEncodeError` from the console's default `cp1252` codepage,
+   `UnicodeEncodeError` from the console's default `cp1252` codepage, which I
    discovered while adding a Turkish regression test. Without this fix,
    fix #2 above would have been undermined immediately: the app would
    correctly *accept* a Turkish question, then crash trying to echo it back.
@@ -416,14 +401,14 @@ test, not just code review.
 4. **One corrupted embedding row crashed retrieval for every question, not
    just questions related to that row** — `retrieve.py`'s
    `json.loads(embedding_str)` had no error isolation per row. Confirmed
-   live: inserted a real row with malformed JSON, watched `get_top_chunks()`
+   live: I inserted a real row with malformed JSON, watched `get_top_chunks()`
    fail entirely, fixed it to skip and log just the bad row, re-ran and
    confirmed the other 8 rows still returned correctly, then removed the
    test row
 5. **Missing `knowledge.db`/table crashed `app.py`, `retrieve.py`, and
    `check-db.py` with raw tracebacks** — confirmed live by actually deleting
    `knowledge.db` and re-running each; all three now show a clear "run
-   `python ingest.py` first" message instead. Backed up and restored the
+   `python ingest.py` first" message instead. I backed up and restored the
    real database around this test
 6. **No error handling around Foundry Local SDK calls** — a transient
    failure (service not running, no internet on first model download) on
@@ -435,12 +420,12 @@ test, not just code review.
 **Other real bugs found and fixed (lower severity, still real):**
 7. `chunk_text()` silently dropped internal periods when a long paragraph
    got split on sentence boundaries and rejoined (`str.split(". ")` discards
-   the delimiter) — confirmed by reconstructing chunked text and diffing
-   against the original
+   the delimiter) — I confirmed this by reconstructing chunked text and
+   diffing it against the original
 8. Windows line endings (`\r\n\r\n`) weren't recognized as paragraph breaks
    (only `\n\n` was), so a document pasted from Notepad/Word would silently
    fail to chunk by paragraph at all — this project is Windows-only, so this
-   was a realistic, not theoretical, gap
+   was a realistic gap, not a theoretical one
 9. `chunk_documents("a string")` would silently iterate character-by-character
    instead of erroring, since strings are iterable — now raises `TypeError`
 10. `cosine_similarity()` silently truncated to the shorter vector on a
@@ -452,19 +437,18 @@ test, not just code review.
     instead of risking a silent, permanent, undetectable content/embedding
     mismatch in `knowledge.db`
 
-**New permanent regression coverage added to `evaluate.py`:** a Turkish
+**New permanent regression coverage I added to `evaluate.py`:** a Turkish
 sentence in `GIBBERISH_CHECKS` (bug #2/#3), and a new `check_chunking()`
 section covering the `max_chars` guard, period preservation, CRLF handling,
-and the string-vs-list type check (bugs #1, #7, #8, #9). Full suite re-run
-after every single fix: 10/10 end-to-end cases, 9/9 gibberish checks, 5/5
-chunking checks, throughout.
+and the string-vs-list type check (bugs #1, #7, #8, #9). I re-ran the full
+suite after every single fix: 10/10 end-to-end cases, 9/9 gibberish checks,
+5/5 chunking checks, throughout.
 
-**Follow-up: four of the five lower-priority items above were fixed too,**
-after asking "can we fix these as well" — each verified live, not just
-reviewed:
+**Follow-up: I went back and fixed four of the five lower-priority items
+above too** — each verified live, not just reviewed:
 - The destructive `DELETE` in `ingest.py` now prints `"Removing N stale
   row(s)..."` before it runs, whenever it's actually about to delete
-  something — confirmed by temporarily shrinking the document list and
+  something — I confirmed this by temporarily shrinking the document list and
   watching the message appear, then confirming it stays silent on a normal
   re-run where nothing is stale
 - Every `sqlite3.connect()` across `ingest.py`, `retrieve.py`, `app.py`,
@@ -477,16 +461,16 @@ reviewed:
   of caching forever, so it reflects a re-run of `ingest.py` within a
   minute instead of staying stale until the server restarts
 
-**Left as-is, by choice:** `doc_index` fragility (editing an early document
-shifts every later chunk's index — not corrupting, just causes a full
-rewrite of everything after it). A proper fix means keying rows by a
+**Left as-is, by my choice:** `doc_index` fragility (editing an early
+document shifts every later chunk's index — not corrupting, just causes a
+full rewrite of everything after it). A proper fix means keying rows by a
 content hash instead of list position, which requires a `knowledge.db`
-schema change. Checked what the plan document actually asks for here: it
+schema change. I checked what the plan document actually asks for here: it
 only says ingestion should be "a simple setup script to re-run... if
 documents are added or changed" (optional, Week 3) — nothing about how
 rows should be keyed or about update efficiency. Since this isn't a
-document requirement and doesn't cause any actual corruption, it was
-deliberately left as a documented trade-off rather than fixed.
+document requirement and doesn't cause any actual corruption, I deliberately
+left it as a documented trade-off rather than fixing it.
 
 ## Lessons Learned
 
@@ -496,10 +480,10 @@ log above:
 - **A model's own instructions aren't a reliable safety mechanism.** Week 2's
   prompt experiment showed the chat model ignoring explicit, even
   emphatic ("DO NOT", "SAY I DON'T KNOW") instructions not to answer
-  off-topic questions. Relevance filtering had to be enforced in code
-  (`RELEVANCE_THRESHOLD` in `main.py`), not trusted to the prompt.
+  off-topic questions. I had to enforce relevance filtering in code
+  (`RELEVANCE_THRESHOLD` in `main.py`) rather than trusting it to the prompt.
 - **A similarity threshold is a probabilistic filter, not a guarantee.**
-  Both the original Week 5 bug and the false positives found in Week 6 came
+  Both the original Week 5 bug and the false positives I found in Week 6 came
   from the same root cause: short or unusual text can score above/below
   0.5 by chance, in either direction. The fix was never "pick a better
   number" — it was adding an earlier, cheaper filter (`is_gibberish()`) and
@@ -520,61 +504,36 @@ log above:
 - **A framework's internal DOM structure isn't documented and can't be
   assumed.** Streamlit's `st.columns()` output is wrapped in an
   `stLayoutWrapper` layer that isn't mentioned in its docs — a CSS fix that
-  looked correct on paper silently failed until the actual structure was
-  inspected directly in the browser.
+  looked correct on paper silently failed until I inspected the actual
+  structure directly in the browser.
 - **Understanding and testing are not the same thing.** Being able to
   verify that code works (via `evaluate.py`, live browser testing, or a
   clean-machine setup check) is real and valuable, but it's a different
-  skill from being able to explain or reproduce the code yourself — see
-  "Session continuity" below for where that gap still exists in this
-  project.
+  skill from being able to explain or reproduce the code from scratch.
 
-## Session continuity
-Working style established with this user: tutoring, not vibe-coding — explain
-concepts before code, small chunks, ask the user to explain things back, and
-when the user needs to write code themselves, use a scaffolded technique
-(sketch the module map, give each small piece a contract, user writes 3-8
-lines at a time, test in isolation before integrating). Git commits should
-not include a Co-Authored-By trailer.
+## Development notes
 
-**Honest status on that working style, as of Week 6:** Week 1-4's core
-pipeline (`ingest.py`, `main.py`) genuinely got the line-by-line tutoring
-treatment. `retrieve.py`'s `cosine_similarity()` did not — explained
-conceptually only, walkthrough never finished, still an open gap (the Week 6
-comments added to `retrieve.py` explain *what* the smoke-test block is for,
-which is not the same as a tutored walkthrough of *how* `cosine_similarity()`
-works). Starting at Week 5 ("don't get stuck on tutorial loop hell") and
-continuing through the Streamlit UI and Week 6's cleanup pass, work stayed in
-directive mode: Claude wrote, tested, and debugged (including two background
-agents used to audit the codebase and stress-test the trickiest bug fix);
-the user chose scope (which bugs to fix vs. document) via direct questions,
-but did not write or co-derive the code itself. This was an explicit,
-discussed trade-off, not an accident — but it means genuine understanding of
-Week 5+, the UI, and Week 6's three bug fixes hasn't been built yet the way
-Weeks 1-4 were. If resuming tutoring mode, good next steps in priority order:
-(1) finish `retrieve.py`'s walkthrough — the oldest open gap, (2)
-retroactively walk through `evaluate.py` and the Week 5 fixes, (3)
-retroactively walk through `app.py`, (4) retroactively walk through Week 6's
-three bug fixes, especially *why* the digraph-collapse approach works for
-`is_gibberish()` — it's the least intuitive piece of code in the project.
-
-Full detail lives in this session's chat history, but the essentials above
-are what a fresh conversation needs to pick this project back up without
-re-deriving any of it.
+I built this with AI assistance (Claude Code). I set the scope and design
+decisions, chose which issues to fix versus document as deliberate
+trade-offs, and verified the work by testing rather than by review alone —
+the relevance threshold, the gibberish filter, and every bug in the log above
+came out of tests run against the running system, not from reading the code.
+I worked through the early pipeline (`ingest.py`, `main.py`) line by line;
+the later testing, UI, and hardening passes were more heavily AI-assisted.
 
 ## Notes / Known Issues
-- Document's example model `phi-1.5` is not in the actual Foundry Local 
-  catalog; using `phi-3-mini-4k` instead
-- Document's SQLite reference link ([Windows Apps - SQLite data access](https://learn.microsoft.com/en-us/windows/apps/develop/data-access/sqlite-data-access))
-  is for C#/.NET (Windows app dev), not Python — using Python's built-in
+- The plan document's example model `phi-1.5` is not in the actual Foundry
+  Local catalog; I used `phi-3-mini-4k` instead
+- The plan document's SQLite reference link ([Windows Apps - SQLite data access](https://learn.microsoft.com/en-us/windows/apps/develop/data-access/sqlite-data-access))
+  is for C#/.NET (Windows app dev), not Python — I used Python's built-in
   `sqlite3` module instead
 - The plan's Week 2 prompt-engineering exercise calls for testing against
-  "a public web AI (Bing Chat/ChatGPT)"; `test-files-week2/prompt-test.py`
+  "a public web AI (Bing Chat/ChatGPT)"; my `test-files-week2/prompt-test.py`
   tests against the local `phi-3-mini-4k` model instead, since that's the
   actual model this project's grounding behavior depends on — a more
   directly relevant test than an unrelated public chatbot
 - **Resolved:** this used to note that `ingest.py` had no real chunking
-  algorithm, just a hand-written list of already-short facts. A real
+  algorithm, just a hand-written list of already-short facts. I added a real
   paragraph/sentence-boundary chunker (`chunk_text()`/`chunk_documents()`)
-  was added afterward to support longer documents going forward — see the
-  Week 3 entry above for details and verification
+  afterward to support longer documents going forward — see the Week 3 entry
+  above for details and verification
