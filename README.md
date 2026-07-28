@@ -32,8 +32,11 @@ to a local LLM for grounded, source-based answers — with zero cloud dependency
 Tutorials and docs actually referenced while building this:
 - [Building Your First Local RAG Application with Foundry Local](https://azurefeeds.com/2026/03/30/building-your-first-local-rag-application-with-foundry-local/) — the Tech Community blog post this whole project is modeled after (retrieve → augment → generate, embeddings + SQLite + a local chat model)
 - [What is Foundry Local?](https://learn.microsoft.com/en-us/azure/foundry-local/what-is-foundry-local) — overview used during Week 1 setup
+- [Get started with Foundry Local](https://learn.microsoft.com/en-us/azure/foundry-local/get-started?tabs=windows&pivots=programming-language-python) — install steps and chat-completions API usage (Python), covering both the plan's "Get started" and "Quickstart" resource mentions since Foundry Local's docs don't have those as two separate current pages
 - [Tutorial: Build a RAG app with Foundry Local](https://learn.microsoft.com/en-us/azure/foundry-local/tutorials/tutorial-build-rag-app?tabs=windows) — the official walkthrough this project's ingestion/retrieval pipeline follows the shape of
 - [SQLite](https://sqlite.org/index.html) — official docs, used instead of the internship plan document's own SQLite reference link, which pointed to C#/.NET Windows app-dev docs rather than Python (see Notes / Known Issues)
+- [Prompt engineering techniques](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/prompt-engineering) — basics of system/user prompt construction, referenced while designing `SYSTEM_PROMPT` in `main.py` and the Week 2 prompt experiment
+- [Streamlit documentation](https://docs.streamlit.io/) — third-party, used for `app.py`'s chat interface, session state, and layout components (Option B from the plan)
 
 ## Version Control
 
@@ -122,9 +125,21 @@ python check-db.py      # inspect knowledge.db contents (debugging)
     planned for Week 3
 
 ### Week 3 — Data Ingestion & Retrieval Pipeline ✅
-- `ingest.py` — chunks the knowledge base, embeds each chunk with
-  `qwen3-embedding-0.6b`, and stores `(doc_index, content, embedding)` in
-  `knowledge.db`, updating existing rows instead of duplicating them on rerun
+- `ingest.py` — `chunk_text()` splits each entry in the `documents` list on
+  blank-line paragraph breaks, further splitting any paragraph over 500
+  characters on sentence boundaries; `chunk_documents()` flattens this
+  across the whole list. The resulting chunks are embedded with
+  `qwen3-embedding-0.6b` and stored as `(doc_index, content, embedding)` in
+  `knowledge.db`, updating existing rows instead of duplicating them on
+  rerun. (Added after the fact, prompted by wanting to support a bigger/
+  longer document list later — the original 8 short facts didn't need
+  splitting on their own, so this was initially skipped and documented as a
+  limitation before being implemented. Verified with unit tests on
+  synthetic multi-paragraph input, a regression test confirming the
+  existing 8 facts still produce exactly 8 unchanged chunks, and a live
+  test showing a 3-paragraph document correctly split into 3 independently
+  retrievable rows, with a query about one paragraph's topic correctly
+  scoring that specific chunk highest)
 - `retrieve.py` — `get_top_chunks(query, embedding_client, k)` embeds a query,
   computes cosine similarity against every stored embedding, and returns the
   top-K matching chunks; tested against on-topic and off-topic queries
@@ -406,5 +421,16 @@ re-deriving any of it.
 ## Notes / Known Issues
 - Document's example model `phi-1.5` is not in the actual Foundry Local 
   catalog; using `phi-3-mini-4k` instead
-- Document's SQLite reference link is for C#/.NET (Windows app dev), not 
-  Python — using Python's built-in `sqlite3` module instead
+- Document's SQLite reference link ([Windows Apps - SQLite data access](https://learn.microsoft.com/en-us/windows/apps/develop/data-access/sqlite-data-access))
+  is for C#/.NET (Windows app dev), not Python — using Python's built-in
+  `sqlite3` module instead
+- The plan's Week 2 prompt-engineering exercise calls for testing against
+  "a public web AI (Bing Chat/ChatGPT)"; `test-files-week2/prompt-test.py`
+  tests against the local `phi-3-mini-4k` model instead, since that's the
+  actual model this project's grounding behavior depends on — a more
+  directly relevant test than an unrelated public chatbot
+- **Resolved:** this used to note that `ingest.py` had no real chunking
+  algorithm, just a hand-written list of already-short facts. A real
+  paragraph/sentence-boundary chunker (`chunk_text()`/`chunk_documents()`)
+  was added afterward to support longer documents going forward — see the
+  Week 3 entry above for details and verification
