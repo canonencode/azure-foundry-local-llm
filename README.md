@@ -4,6 +4,16 @@ A local, offline Q&A assistant built using Microsoft Foundry Local and Python,
 following the Retrieval-Augmented Generation (RAG) pattern. Everything runs 
 on-device — no internet connection required after initial model downloads.
 
+## Problem Statement
+
+Generic chat models either don't know about a specific, private document
+collection at all, or hallucinate an answer that sounds plausible but isn't
+grounded in that collection. Sending that data to a cloud API isn't always
+acceptable either. The scenario this project targets: someone with a small
+set of documents (course notes, FAQs, internal docs) who wants accurate,
+source-grounded answers to questions about them — entirely on their own
+machine, with no internet dependency and no data leaving the device.
+
 ## Project Goal
 
 Build a chatbot that answers questions about a small document collection by 
@@ -16,6 +26,25 @@ to a local LLM for grounded, source-based answers — with zero cloud dependency
 - **Python** — `foundry-local-sdk-winml`
 - **SQLite** (`sqlite3`, built-in) — local storage for document chunks + embeddings
 - Models used: `phi-3-mini-4k` (chat), `qwen3-embedding-0.6b` (embeddings)
+
+## Resources
+
+Tutorials and docs actually referenced while building this:
+- [Building Your First Local RAG Application with Foundry Local](https://azurefeeds.com/2026/03/30/building-your-first-local-rag-application-with-foundry-local/) — the Tech Community blog post this whole project is modeled after (retrieve → augment → generate, embeddings + SQLite + a local chat model)
+- [What is Foundry Local?](https://learn.microsoft.com/en-us/azure/foundry-local/what-is-foundry-local) — overview used during Week 1 setup
+- [Tutorial: Build a RAG app with Foundry Local](https://learn.microsoft.com/en-us/azure/foundry-local/tutorials/tutorial-build-rag-app?tabs=windows) — the official walkthrough this project's ingestion/retrieval pipeline follows the shape of
+- [SQLite](https://sqlite.org/index.html) — official docs, used instead of the internship plan document's own SQLite reference link, which pointed to C#/.NET Windows app-dev docs rather than Python (see Notes / Known Issues)
+
+## Version Control
+
+Each week's work is committed as its own milestone (`Week N - Completed`),
+with smaller commits for individual exercises/scripts within a week where it
+made sense to split them up — see `git log` for the full history. This
+keeps each week's state inspectable on its own rather than squashed into one
+final commit, and made it possible to point at exactly what changed and why
+at several points during this project (e.g. the Week 5/6 bug fixes reference
+specific before/after behavior). Commits don't carry a `Co-Authored-By`
+trailer, by explicit preference established early in this project.
 
 ## Setup
 
@@ -299,6 +328,47 @@ verified after landing:
   positive unrelated to digraphs) were left as a documented, out-of-scope
   limitation rather than fixed — implausible as real query vocabulary for
   this project, and no adjustment can fix them without reopening other cases
+
+## Lessons Learned
+
+Pulling together the insights that are otherwise scattered across the weekly
+log above:
+
+- **A model's own instructions aren't a reliable safety mechanism.** Week 2's
+  prompt experiment showed the chat model ignoring explicit, even
+  emphatic ("DO NOT", "SAY I DON'T KNOW") instructions not to answer
+  off-topic questions. Relevance filtering had to be enforced in code
+  (`RELEVANCE_THRESHOLD` in `main.py`), not trusted to the prompt.
+- **A similarity threshold is a probabilistic filter, not a guarantee.**
+  Both the original Week 5 bug and the false positives found in Week 6 came
+  from the same root cause: short or unusual text can score above/below
+  0.5 by chance, in either direction. The fix was never "pick a better
+  number" — it was adding an earlier, cheaper filter (`is_gibberish()`) and
+  accepting that even that has its own bounded edge cases, documented
+  rather than pretending they don't exist.
+- **A heuristic's threshold can be mathematically unfixable in isolation.**
+  Week 6's gibberish-detector bug couldn't be solved by adjusting a single
+  number — the known gibberish test case and a real false-positive word had
+  overlapping consonant-run lengths, so any threshold that fixed one broke
+  the other. The actual fix required changing what was being measured
+  (collapsing digraphs first), not just retuning the existing measurement.
+- **Testing the underlying function beats testing only the final output.**
+  `evaluate.py` couldn't distinguish "correctly rejected as off-topic" from
+  "incorrectly rejected as gibberish" by inspecting the answer text alone,
+  since both produce the identical fallback message. Proving the Week 6 fix
+  worked required calling `is_gibberish()` directly, not just running the
+  full pipeline and checking the output.
+- **A framework's internal DOM structure isn't documented and can't be
+  assumed.** Streamlit's `st.columns()` output is wrapped in an
+  `stLayoutWrapper` layer that isn't mentioned in its docs — a CSS fix that
+  looked correct on paper silently failed until the actual structure was
+  inspected directly in the browser.
+- **Understanding and testing are not the same thing.** Being able to
+  verify that code works (via `evaluate.py`, live browser testing, or a
+  clean-machine setup check) is real and valuable, but it's a different
+  skill from being able to explain or reproduce the code yourself — see
+  "Session continuity" below for where that gap still exists in this
+  project.
 
 ## Session continuity
 Working style established with this user: tutoring, not vibe-coding — explain
