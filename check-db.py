@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def main():
-    conn = sqlite3.connect("knowledge.db")
+    conn = sqlite3.connect("knowledge.db", timeout=5)
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM documents")

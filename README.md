@@ -425,16 +425,34 @@ and the string-vs-list type check (bugs #1, #7, #8, #9). Full suite re-run
 after every single fix: 10/10 end-to-end cases, 9/9 gibberish checks, 5/5
 chunking checks, throughout.
 
-**Noted but not fixed (lower priority, documented trade-offs):** an
-unguarded destructive `DELETE` in `ingest.py` if `chunks` ever comes out
-much shorter than expected (by design for the stale-row cleanup, but no
-confirmation prompt); `doc_index` fragility (editing an early document
+**Follow-up: four of the five lower-priority items above were fixed too,**
+after asking "can we fix these as well" — each verified live, not just
+reviewed:
+- The destructive `DELETE` in `ingest.py` now prints `"Removing N stale
+  row(s)..."` before it runs, whenever it's actually about to delete
+  something — confirmed by temporarily shrinking the document list and
+  watching the message appear, then confirming it stays silent on a normal
+  re-run where nothing is stale
+- Every `sqlite3.connect()` across `ingest.py`, `retrieve.py`, `app.py`,
+  `check-db.py`, and `test-files-week2/sqlite-test.py` is now wrapped in
+  `try/finally` so the connection always closes, even on an exception
+- All of those connections now pass `timeout=5`, so a narrow
+  `ingest.py`-vs-`app.py` locking race retries for 5s instead of failing
+  instantly with "database is locked"
+- `app.py`'s cached document count now uses `st.cache_data(ttl=60)` instead
+  of caching forever, so it reflects a re-run of `ingest.py` within a
+  minute instead of staying stale until the server restarts
+
+**Left as-is, by choice:** `doc_index` fragility (editing an early document
 shifts every later chunk's index — not corrupting, just causes a full
-rewrite); DB connections not wrapped in `try/finally` (CPython's
-refcounting closes them anyway in these short-lived scripts); a narrow
-SQLite locking race if `ingest.py` runs while `app.py` is serving a request;
-`app.py`'s cached document count going stale if `ingest.py` re-runs against
-a live server (cosmetic only).
+rewrite of everything after it). A proper fix means keying rows by a
+content hash instead of list position, which requires a `knowledge.db`
+schema change. Checked what the plan document actually asks for here: it
+only says ingestion should be "a simple setup script to re-run... if
+documents are added or changed" (optional, Week 3) — nothing about how
+rows should be keyed or about update efficiency. Since this isn't a
+document requirement and doesn't cause any actual corruption, it was
+deliberately left as a documented trade-off rather than fixed.
 
 ## Lessons Learned
 

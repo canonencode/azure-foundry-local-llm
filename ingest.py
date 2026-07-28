@@ -101,73 +101,83 @@ def chunk_documents(documents):
 
 
 def main():
-    # Set up SQLite connection + table
-    conn = sqlite3.connect("knowledge.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS documents (
-            id INTEGER PRIMARY KEY,
-            doc_index INTEGER UNIQUE,
-            content TEXT,
-            embedding TEXT
-        )
-    """)
-
-    config = Configuration(app_name="azure-foundry-local-llm-ingest")
-    FoundryLocalManager.initialize(config)
-    manager = FoundryLocalManager.instance
-
-    embedding_model = manager.catalog.get_model("qwen3-embedding-0.6b")
-    embedding_model.download(lambda p: print(f"\rDownloading embedding model: {p:.1f}%", end="", flush=True))
-    print()
-    embedding_model.load()
-    embedding_client = embedding_model.get_embedding_client()
-
-    chunks = chunk_documents(documents)
-
-    response = embedding_client.generate_embeddings(chunks)
-    chunk_embeddings = [item.embedding for item in response.data]
-
-    # If the API ever returned a different count than requested (partial
-    # failure, filtering), assume the order is unreliable too and fail
-    # loudly - silently zipping mismatched lists by position would pair
-    # the wrong embedding with the wrong chunk, permanently, with no way
-    # to detect it later.
-    if len(chunk_embeddings) != len(chunks):
-        raise RuntimeError(
-            f"Embedding count mismatch: requested {len(chunks)} chunks, "
-            f"got {len(chunk_embeddings)} embeddings back. Aborting rather "
-            f"than risk storing mismatched content/embedding pairs."
-        )
-
-    # Keyed on the UNIQUE doc_index column so rerunning this script updates
-    # existing rows in place instead of inserting duplicates.
-    for doc_index, content in enumerate(chunks):
-        embedding = chunk_embeddings[doc_index]
-        embedding_str = json.dumps(embedding)
-        cursor.execute("SELECT id FROM documents WHERE doc_index = ?", (doc_index,))
-        existing = cursor.fetchone()
-
-        if existing:
-            cursor.execute(
-                "UPDATE documents SET content = ?, embedding = ? WHERE doc_index = ?",
-                (content, embedding_str, doc_index)
+    # timeout=5 makes SQLite retry for up to 5s on "database is locked"
+    # instead of failing instantly, in case app.py has a read in flight.
+    conn = sqlite3.connect("knowledge.db", timeout=5)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY,
+                doc_index INTEGER UNIQUE,
+                content TEXT,
+                embedding TEXT
             )
-        else:
-            cursor.execute(
-                "INSERT INTO documents (doc_index, content, embedding) VALUES (?, ?, ?)",
-                (doc_index, content, embedding_str)
+        """)
+
+        config = Configuration(app_name="azure-foundry-local-llm-ingest")
+        FoundryLocalManager.initialize(config)
+        manager = FoundryLocalManager.instance
+
+        embedding_model = manager.catalog.get_model("qwen3-embedding-0.6b")
+        embedding_model.download(lambda p: print(f"\rDownloading embedding model: {p:.1f}%", end="", flush=True))
+        print()
+        embedding_model.load()
+        embedding_client = embedding_model.get_embedding_client()
+
+        chunks = chunk_documents(documents)
+
+        response = embedding_client.generate_embeddings(chunks)
+        chunk_embeddings = [item.embedding for item in response.data]
+
+        # If the API ever returned a different count than requested (partial
+        # failure, filtering), assume the order is unreliable too and fail
+        # loudly - silently zipping mismatched lists by position would pair
+        # the wrong embedding with the wrong chunk, permanently, with no way
+        # to detect it later.
+        if len(chunk_embeddings) != len(chunks):
+            raise RuntimeError(
+                f"Embedding count mismatch: requested {len(chunks)} chunks, "
+                f"got {len(chunk_embeddings)} embeddings back. Aborting rather "
+                f"than risk storing mismatched content/embedding pairs."
             )
 
-    # Chunks are keyed by their position in the flattened list above (via
-    # enumerate), so if a document was removed or now produces fewer chunks,
-    # any row at or past the new shorter length is orphaned - delete it
-    # rather than leaving a stale chunk retrievable forever.
-    cursor.execute("DELETE FROM documents WHERE doc_index >= ?", (len(chunks),))
+        # Keyed on the UNIQUE doc_index column so rerunning this script updates
+        # existing rows in place instead of inserting duplicates.
+        for doc_index, content in enumerate(chunks):
+            embedding = chunk_embeddings[doc_index]
+            embedding_str = json.dumps(embedding)
+            cursor.execute("SELECT id FROM documents WHERE doc_index = ?", (doc_index,))
+            existing = cursor.fetchone()
 
-    conn.commit()
-    conn.close()
-    print(f"Ingestion complete. {len(documents)} documents -> {len(chunks)} chunks processed.")
+            if existing:
+                cursor.execute(
+                    "UPDATE documents SET content = ?, embedding = ? WHERE doc_index = ?",
+                    (content, embedding_str, doc_index)
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO documents (doc_index, content, embedding) VALUES (?, ?, ?)",
+                    (doc_index, content, embedding_str)
+                )
+
+        # Chunks are keyed by their position in the flattened list above (via
+        # enumerate), so if a document was removed or now produces fewer chunks,
+        # any row at or past the new shorter length is orphaned - delete it
+        # rather than leaving a stale chunk retrievable forever. Warn loudly
+        # first, since this is a destructive, unconfirmed delete - if the
+        # count looks surprisingly large, that's worth noticing before it's
+        # too late to stop it.
+        cursor.execute("SELECT COUNT(*) FROM documents WHERE doc_index >= ?", (len(chunks),))
+        stale_count = cursor.fetchone()[0]
+        if stale_count:
+            print(f"Removing {stale_count} stale row(s) no longer produced by the current documents list.")
+        cursor.execute("DELETE FROM documents WHERE doc_index >= ?", (len(chunks),))
+
+        conn.commit()
+        print(f"Ingestion complete. {len(documents)} documents -> {len(chunks)} chunks processed.")
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

@@ -180,9 +180,11 @@ def get_clients():
     return build_clients()
 
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def get_doc_count():
-    conn = sqlite3.connect("knowledge.db")
+    # ttl=60 so this refreshes within a minute if ingest.py is re-run while
+    # this server is live, rather than staying stale until the next restart.
+    conn = sqlite3.connect("knowledge.db", timeout=5)
     try:
         return conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
     except sqlite3.OperationalError:

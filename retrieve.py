@@ -44,7 +44,9 @@ def get_top_chunks(query, embedding_client, k=3):
     query_response = embedding_client.generate_embedding(query)
     query_embedding = query_response.data[0].embedding
 
-    conn = sqlite3.connect("knowledge.db")
+    # timeout=5 makes SQLite retry for up to 5s on "database is locked"
+    # instead of failing instantly, in case ingest.py has a write in flight.
+    conn = sqlite3.connect("knowledge.db", timeout=5)
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT content, embedding FROM documents")
