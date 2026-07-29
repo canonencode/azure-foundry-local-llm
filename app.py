@@ -3,6 +3,7 @@
 # pipeline - build_clients()/answer_query() from main.py are unchanged.
 # streamlit run app.py
 
+import random
 import sqlite3
 
 import streamlit as st
@@ -196,14 +197,58 @@ def get_doc_count():
         conn.close()
 
 
-EXAMPLE_QUESTIONS = [
+# Every question here is answerable from the ingested corpus and was checked
+# to score above RELEVANCE_THRESHOLD, so a suggestion can never lead to the
+# "I don't have that information." fallback, which would read as the app being
+# broken rather than as it working correctly. Kept short deliberately: the
+# buttons sit in equal-width columns and rely on text wrapping to fit, so long
+# questions make the row uneven.
+EXAMPLE_QUESTION_POOL = [
     "What is Foundry Local?",
-    "How does cosine similarity measure relevance?",
-    "What is SQLite used for in this project?",
+    "What does RAG stand for?",
+    "How does cosine similarity work?",
+    "What is SQLite used for here?",
+    "What are embeddings?",
+    "System prompt vs user prompt?",
+    "Which models does this project use?",
+    "Why do small models ignore instructions?",
+    "Why does retrieval quality matter?",
+    "What is chunk overlap?",
+    "How are documents split into chunks?",
+    "What is a relevance threshold?",
+    "Why run a model locally?",
+    "Why SQLite instead of a server?",
+    "What is a context window?",
+    "What is a token?",
+    "Why do language models hallucinate?",
+    "What is streaming output?",
+    "How do you evaluate a RAG system?",
+    "What is approximate nearest neighbour search?",
 ]
+EXAMPLE_QUESTION_COUNT = 3
+
+
+def roll_example_questions():
+    """Pick a fresh set of suggestions.
+
+    Deliberately not sampled inline where the buttons are rendered: Streamlit
+    re-runs the whole script on every interaction, so that would reshuffle the
+    suggestions while the user is still reading them. Storing the pick in
+    session_state keeps it stable until something actually calls this again.
+    """
+    previous = set(st.session_state.get("example_questions", ()))
+    picked = random.sample(EXAMPLE_QUESTION_POOL, EXAMPLE_QUESTION_COUNT)
+    if set(picked) == previous:
+        # Re-roll once so clearing the history visibly changes the suggestions
+        # instead of appearing to have done nothing.
+        picked = random.sample(EXAMPLE_QUESTION_POOL, EXAMPLE_QUESTION_COUNT)
+    st.session_state.example_questions = picked
 
 if "history" not in st.session_state:
     st.session_state.history = []
+
+if "example_questions" not in st.session_state:
+    roll_example_questions()
 
 try:
     with st.spinner("Initializing local AI models (first run may take a moment)..."):
@@ -233,6 +278,8 @@ with st.sidebar:
             st.write("This will permanently delete the entire conversation.")
             if st.button("Confirm delete", type="primary", use_container_width=True):
                 st.session_state.history = []
+                # Returning to the empty state, so offer a different set.
+                roll_example_questions()
                 st.toast("History cleared.")
                 st.rerun()
     else:
@@ -244,8 +291,9 @@ st.caption("Powered by Microsoft Foundry Local - runs entirely on-device, no int
 
 if not st.session_state.history:
     st.info("No conversation yet. Ask a question below, or try one of these:")
-    cols = st.columns(len(EXAMPLE_QUESTIONS))
-    for col, example in zip(cols, EXAMPLE_QUESTIONS):
+    examples = st.session_state.example_questions
+    cols = st.columns(len(examples))
+    for col, example in zip(cols, examples):
         if col.button(example, use_container_width=True):
             st.session_state.pending_question = example
             st.rerun()
@@ -275,6 +323,10 @@ for i, entry in enumerate(st.session_state.history):
         _, delete_col = st.columns([9, 1])
         if delete_col.button("✕", key=f"delete_{i}", help="Delete this exchange"):
             st.session_state.history.pop(i)
+            if not st.session_state.history:
+                # Deleting the last exchange also lands back on the empty
+                # state, so refresh the suggestions there too.
+                roll_example_questions()
             st.rerun()
 
 prompt = st.chat_input("Ask a question...")
