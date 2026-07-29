@@ -158,7 +158,12 @@ def answer_query(question, chat_client, embedding_client, verbose=True, top_chun
 
     print("Answer: ", end="", flush=True)
 
-    if not top_chunks or top_chunks[0][0] < RELEVANCE_THRESHOLD:
+    # Gate on the best similarity anywhere in the retrieved set, not on the
+    # first entry. retrieve.py orders results by a blend of similarity and
+    # keyword match, so the first chunk is no longer guaranteed to be the
+    # highest-scoring one, and reading [0][0] would quietly start refusing
+    # questions it used to answer.
+    if not top_chunks or max(score for score, _ in top_chunks) < RELEVANCE_THRESHOLD:
         answer = "I don't have that information."
         print(f"{answer}\n")
         return answer

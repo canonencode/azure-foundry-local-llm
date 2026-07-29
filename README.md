@@ -1,7 +1,5 @@
 # Local RAG Assistant with Microsoft Foundry Local
 
-**Project is over.**
-
 A local, offline Q&A assistant I built using Microsoft Foundry Local and Python,
 following the Retrieval-Augmented Generation (RAG) pattern. Everything runs
 on-device: no internet connection required after initial model downloads.
@@ -362,9 +360,11 @@ one after it landed:
   `def main(): ... if __name__ == "__main__":` structure
 - I left two additional false-positive words I found during stress-testing
   (`postscript`, `thumbscrew`; a different, pre-existing class of false
-  positive unrelated to digraphs) as a documented, out-of-scope limitation
-  rather than fixing them; they're implausible as real query vocabulary for
-  this project, and no adjustment can fix them without reopening other cases
+  positive unrelated to digraphs) as a documented, out-of-scope limitation,
+  on the reasoning that no threshold adjustment could fix them without
+  reopening earlier cases. Both halves of that turned out to be wrong: there
+  were more than two, and a different signal does fix them. I corrected it
+  later, see the improvements entry below
 
 ### Extensive Bug Hunt & Hardening ✅
 A deliberate paranoid pass: a fresh static security/correctness audit of every
@@ -473,6 +473,130 @@ rows should be keyed or about update efficiency. Since this isn't a
 document requirement and doesn't cause any actual corruption, I deliberately
 left it as a documented trade-off rather than fixing it.
 
+### Retrieval and Filtering Improvements ✅
+A round of improvements after the six-week build was finished, aimed at
+retrieval quality rather than at closing plan requirements.
+
+- **The gibberish filter was rejecting real English words, and there were
+  more of them than I had documented.** I had recorded two (`postscript`,
+  `thumbscrew`) as an unfixable limitation. Measuring properly against 137
+  real words found eight: `postscript`, `postscripts`, `thumbscrew`,
+  `offsprings`, `corkscrew`, `heartstrings`, `downstream`, `windscreen`.
+  Every one is a compound whose two halves meet in a consonant cluster
+  ("post+script", "cork+screw"), which is exactly what the run check looks
+  for. What separates them from keyboard mash is that a real word keeps
+  vowels throughout while mash is vowel-starved, so `is_gibberish()` now
+  requires a long consonant run *and* a vowel ratio below
+  `MIN_VOWEL_RATIO = 0.18`. I picked that number by measuring rather than
+  guessing: across 137 real words and 26 mash strings the two groups
+  separate cleanly between 0.167 (the most vowel-rich mash) and 0.182 (the
+  least vowel-rich real word). The extra condition can only make the filter
+  more permissive, which is the safe direction here, since a false positive
+  silently refuses a real question while a false negative just falls through
+  to `RELEVANCE_THRESHOLD`. All eight now pass, and no mash string that was
+  caught before is missed now. 18/18 gibberish checks pass, up from 9
+- **Chunks now overlap.** `chunk_text()` repeats the last ~50 characters of
+  a chunk at the start of the next one when a paragraph gets split, so a
+  fact whose subject and predicate landed either side of a boundary is no
+  longer stored as two halves that each fail to answer the question. The
+  carry is adaptive rather than all-or-nothing: it shrinks to whatever room
+  is left, or drops entirely when a sentence nearly fills a chunk by itself,
+  because never exceeding `max_chars` is the guarantee the function makes.
+  Verified at both realistic and deliberately tight settings
+- **Answers now cite their sources.** Retrieved passages are numbered in the
+  context the model receives, and the same numbered list is printed after
+  the CLI answer and shown in the Streamlit expander with similarity scores.
+  I built this in code rather than by asking for citations in
+  `SYSTEM_PROMPT`, for the same reason `RELEVANCE_THRESHOLD` exists: a
+  model-authored citation could name a passage it never used. Built from
+  what retrieval actually returned, it cannot be wrong by construction
+- **The knowledge base is no longer only short facts.** My original 8 entries
+  were each short enough to pass through the chunker untouched, so nothing
+  in the corpus exercised paragraph splitting, sentence splitting, or the new
+  overlap. I added 12 multi-paragraph documents covering retrieval quality,
+  chunking, embeddings, cosine similarity, relevance thresholds, the
+  trade-offs of local inference, SQLite as an embedding store, context
+  windows, hallucination and grounding, streaming output, how to evaluate a
+  RAG system, and exact versus approximate vector search. The corpus is now
+  20 documents producing 39 chunks, and retrieval visibly benefits: "How does
+  cosine similarity measure relevance?" now returns my original one-line fact
+  at 0.88 alongside a fuller passage at 0.80, where before it had only the
+  one-liner, and questions on the newly covered topics all retrieve well
+  above the threshold (0.71 to 0.82). Off-topic questions score exactly what
+  they scored against the original 8 facts ("What is the capital of France?"
+  at 0.35, "Who won the last World Cup?" at 0.25), so quadrupling the corpus
+  did not erode the relevance gate at all
+- **Hard-wrapped source text is normalized.** Line breaks inside a paragraph
+  now collapse to single spaces before chunking, so stored passages read as
+  continuous prose instead of carrying the original wrapping into every
+  place a retrieved chunk is displayed. Genuine paragraph breaks still split
+- **The Streamlit example questions rotate.** They were three hardcoded
+  strings, so the app always opened on the same suggestions. There is now a
+  pool of 20 drawn from across the whole corpus, sampled three at a time and
+  independently, so any question can appear beside any other: 20 x 19 x 18 =
+  6840 possible arrangements, or 1140 distinct combinations. Confirmed by
+  simulation rather than assumed, since a subtly grouped shuffle would look
+  identical in normal use: over 300,000 rolls every one of the 6840
+  arrangements appeared, each question appeared equally often to within
+  sampling noise, and no roll ever showed the same question twice. The
+  pick is held in `st.session_state` rather than sampled where the buttons
+  are drawn, because Streamlit re-runs the whole script on every interaction
+  and that would reshuffle the suggestions while someone was still reading
+  them; it re-rolls only when the empty state is re-entered, by clearing the
+  history or deleting the last exchange. Every question in the pool was
+  checked to score above `RELEVANCE_THRESHOLD` (lowest 0.51), since a
+  suggestion that led to "I don't have that information." would read as the
+  app being broken rather than as it working correctly. I also checked which
+  passage each one actually retrieves, not just its score, which is how one
+  candidate got rejected: "Why not just send more chunks to the model?"
+  cleared the threshold at 0.67 but returned the passage about streaming
+  rather than the one about context budgets, so it would have produced a
+  confident answer to a different question than the one asked
+- **Retrieval is measured now, and it is measurably better.** Nothing in the
+  project tested retrieval itself: the 10 end-to-end cases only check whether
+  an answer came back or the fallback fired, which cannot tell a well-chosen
+  passage from a badly-chosen one. I added `RETRIEVAL_CHECKS` to
+  `evaluate.py`: 50 questions, each paired with a substring that appears in
+  exactly one stored chunk, the one that genuinely answers it. The check
+  asserts that uniqueness at runtime, because a marker matching two chunks
+  would report a healthy-looking number while measuring nothing. It reports
+  precision@1 (right passage ranked first) and recall@3 (right passage
+  anywhere in the three the model actually receives), and prints every miss
+  with the passage that beat it, so a failure is diagnosable rather than just
+  a number
+- **`retrieve.py` now blends meaning with keywords.** Embedding similarity
+  alone ranked the right passage first 74% of the time, and its misses had a
+  clear shape: a question and a passage share a topic, score highly, and the
+  passage still doesn't answer the question. "What does cosine similarity
+  ignore?" returned a general passage about cosine similarity rather than the
+  one containing the words "ignoring their length". I added a hand-written
+  BM25 keyword score next to the existing hand-written cosine function, in
+  pure Python with no new dependency, and rank by a blend of the two.
+  Precision@1 went from 74% to 82%, and recall@3 from 94% to **100%**: the
+  right passage is now in the model's context for all 50 questions.
+  `DENSE_WEIGHT = 0.7` is not a delicate constant, since every value tested
+  from 0.5 to 0.9 beat the embedding alone
+- **The blend changed what "first" means, which nearly broke the relevance
+  gate.** `main.py` and `app.py` both read `top_chunks[0][0]`, which was safe
+  only while results were ordered by similarity. Ranking by a blend means the
+  first chunk is no longer necessarily the highest-scoring one, so that read
+  would have quietly started refusing questions it used to answer. Both now
+  gate on the best similarity anywhere in the returned set. The returned
+  tuples are still `(cosine, content)` and the blended score is never
+  returned or displayed, so `RELEVANCE_THRESHOLD = 0.5` keeps its exact
+  previous meaning and the "similarity 0.85" shown in Sources is still a real
+  cosine value, which I confirmed by recomputing it from the stored vectors
+- **A hypothesis I had, tested and wrong.** I expected the chunk overlap
+  added above to be polluting retrieval, since a chunk starting with carried
+  text spans two topics. I tested it by re-embedding cleaned chunks in memory
+  and re-running the whole probe set. It made no difference at all, and only
+  2 of 39 chunks even begin with carried text. No overlap changes were made
+- Verified end-to-end after all of the above: 18/18 gibberish checks, 12/12
+  chunking checks (up from 5), retrieval at 82% precision@1 and 100%
+  recall@3, 10/10 end-to-end cases with both relevance-gate fallbacks still
+  firing correctly, plus a live check in the browser that the Streamlit UI
+  shows the numbered sources and picks up the new document count
+
 ## Lessons Learned
 
 Pulling together the insights that are otherwise scattered across the weekly
@@ -507,6 +631,22 @@ log above:
   `stLayoutWrapper` layer that isn't mentioned in its docs; a CSS fix that
   looked correct on paper silently failed until I inspected the actual
   structure directly in the browser.
+- **A test set too small to trust will confidently mislead you.** I first
+  measured retrieval on 20 questions, where blending in keyword scoring
+  looked like it lifted precision from 65% to 75%. Nudging one weight from
+  0.70 to 0.75 then dropped it to 60%. A three-question swing from a tiny
+  parameter change is noise, not a result. Rebuilt at 50 questions the
+  picture was completely different and actually stable: the true baseline was
+  74%, not 65%, and every weight from 0.5 to 0.9 beat it. Had I shipped on
+  the first measurement I would have tuned a constant to fit random variation
+  and quoted an improvement that wasn't real.
+- **Ordering and gating are separate jobs, and mixing them is a silent
+  break.** Ranking by a blended score made `top_chunks[0]` stop meaning "the
+  most similar chunk", which is what the relevance gate had always assumed.
+  Nothing would have crashed; the app would just have begun refusing
+  questions it used to answer. The fix was to keep the returned score as
+  plain cosine and let the blend decide order only, so the threshold's
+  meaning never moved.
 - **Understanding and testing are not the same thing.** Being able to
   verify that code works (via `evaluate.py`, live browser testing, or a
   clean-machine setup check) is real and valuable, but it's a different
@@ -533,8 +673,23 @@ the later testing, UI, and hardening passes were more heavily AI-assisted.
   tests against the local `phi-3-mini-4k` model instead, since that's the
   actual model this project's grounding behavior depends on, a more
   directly relevant test than an unrelated public chatbot
+- `doc_index` fragility is still open by choice: editing an early document
+  shifts every later chunk's index, which forces a rewrite of everything
+  after it. It causes no corruption and the plan document asks nothing about
+  how rows are keyed, so I left it rather than change the `knowledge.db`
+  schema. See the "Left as-is, by my choice" note above for the full
+  reasoning
+- `is_gibberish()` still has two known blind spots, both of which fall
+  through to `RELEVANCE_THRESHOLD` rather than causing a wrong answer:
+  keyboard mash containing a digraph right at the run-length boundary
+  (`sdfgh`), and mash typed along keyboard rows (`poiuytrewq`), which is
+  vowel-rich enough to look like a real word to both checks
 - **Resolved:** this used to note that `ingest.py` had no real chunking
   algorithm, just a hand-written list of already-short facts. I added a real
   paragraph/sentence-boundary chunker (`chunk_text()`/`chunk_documents()`)
   afterward to support longer documents going forward; see the Week 3 entry
   above for details and verification
+- **Resolved:** this used to note the corpus was only 8 short facts, none of
+  which were long enough to exercise the chunker. It is now 20 documents
+  producing 39 chunks, 12 of which split into multiple pieces; see the
+  improvements entry above

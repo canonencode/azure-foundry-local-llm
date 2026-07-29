@@ -306,7 +306,12 @@ for i, entry in enumerate(st.session_state.history):
 
         chunks = entry["chunks"]
         if chunks:
-            passed_gate = chunks[0][0] >= RELEVANCE_THRESHOLD
+            # Best similarity in the set, not the first entry: retrieve.py now
+            # orders by a blend of similarity and keyword match, so the first
+            # chunk is not necessarily the highest-scoring one. Same rule as
+            # answer_query() in main.py, so the label always agrees with the
+            # answer the user actually got.
+            passed_gate = max(score for score, _ in chunks) >= RELEVANCE_THRESHOLD
             label = (
                 "Sources used for this answer"
                 if passed_gate
