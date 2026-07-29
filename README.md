@@ -661,13 +661,22 @@ log above:
 
 ## Development notes
 
-I built this with AI assistance (Claude Code). I set the scope and design
-decisions, chose which issues to fix versus document as deliberate
-trade-offs, and verified the work by testing rather than by review alone:
-the relevance threshold, the gibberish filter, and every bug in the log above
-came out of tests run against the running system, not from reading the code.
-I worked through the early pipeline (`ingest.py`, `main.py`) line by line;
-the later testing, UI, and hardening passes were more heavily AI-assisted.
+I am a second-year Computer Engineering student, and this is a learning
+project: I am still learning to program, and building this is part of how I
+am doing that. I built it with AI assistance (Claude Code), and I would
+rather say so plainly here than have anyone guess.
+
+What I did myself: I set the scope and the design decisions, chose which
+issues to fix versus document as deliberate trade-offs, and verified the work
+by testing rather than by review alone. The relevance threshold, the
+gibberish filter, and every bug in the log above came out of tests run
+against the running system, not from reading the code.
+
+Where the help was heaviest: I worked through the early pipeline
+(`ingest.py`, `main.py`) line by line, so I can explain those. The later
+testing, UI, and hardening passes were more AI-assisted, and I am still
+working back through parts of them to understand them properly rather than
+only knowing that they pass.
 
 ## Notes / Known Issues
 - The plan document's example model `phi-1.5` is not in the actual Foundry
