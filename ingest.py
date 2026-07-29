@@ -27,25 +27,60 @@ documents = [
 ]
 
 
-def chunk_text(text, max_chars=500):
+def overlap_tail(text, overlap):
+    """The last `overlap` characters of text, trimmed forward to a word
+    boundary so the next chunk never begins mid-word.
+    """
+    if overlap <= 0 or not text:
+        return ""
+    if len(text) <= overlap:
+        return text
+    tail = text[-overlap:]
+    if not text[-overlap - 1].isspace():
+        # The cut landed inside a word - drop that leading partial word
+        # rather than starting a chunk with something like "ilarity".
+        _, separator, rest = tail.partition(" ")
+        tail = rest if separator else ""
+    return tail.strip()
+
+
+def chunk_text(text, max_chars=500, overlap=50):
     """Split text into paragraph-sized chunks (blank-line-separated), so RAG
     retrieval operates on passage-level pieces rather than a whole document.
     A paragraph longer than max_chars gets split further on sentence
     boundaries, so no single chunk is too large to be a useful, specific
     match for a query.
+
+    Consecutive chunks of a split paragraph repeat the last `overlap`
+    characters of the previous chunk. Without that, a fact whose subject and
+    predicate land either side of a boundary is retrievable only as two
+    halves, neither of which answers the question on its own. Overlap does
+    not span separate paragraphs or documents, which are already independent
+    units of meaning.
     """
     if max_chars <= 0:
         # The hard character-split below (sentence[:max_chars]) never
         # shrinks the remaining string when max_chars <= 0 - sentence[:0] is
         # "" and sentence[0:] is unchanged, so it would loop forever.
         raise ValueError("max_chars must be a positive integer")
+    if overlap < 0:
+        raise ValueError("overlap must not be negative")
+    if overlap >= max_chars:
+        # Every new chunk would start already full of carried-over text and
+        # could never fit new content, so splitting would make no progress.
+        raise ValueError("overlap must be smaller than max_chars")
 
     # Normalize Windows line endings first - this project is Windows-only,
     # and "\r\n\r\n" (e.g. text pasted from Notepad/Word) wouldn't match the
     # "\n\n" paragraph-break check below otherwise, silently treating a
     # multi-paragraph document as one giant unsplit paragraph.
     text = text.replace("\r\n", "\n")
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    # Collapse whitespace runs inside a paragraph to single spaces. Source
+    # documents are usually hard-wrapped, so without this every chunk carries
+    # the original line breaks around and renders as ragged text wherever the
+    # retrieved passage is displayed. Paragraph breaks ("\n\n") are split on
+    # first, so they survive this.
+    paragraphs = [" ".join(p.split()) for p in text.split("\n\n") if p.strip()]
     chunks = []
     for paragraph in paragraphs:
         if len(paragraph) <= max_chars:
@@ -81,14 +116,23 @@ def chunk_text(text, max_chars=500):
             else:
                 if current:
                     chunks.append(current)
-                current = piece
+                    # Carry over as much of the tail as still leaves room for
+                    # this piece, rather than all-or-nothing: never exceeding
+                    # max_chars is the one guarantee this function makes, so
+                    # a long sentence simply gets less overlap (or none, if it
+                    # nearly fills a chunk by itself) instead of losing it.
+                    room = max_chars - len(piece) - 1
+                    carry = overlap_tail(current, min(overlap, room)) if room > 0 else ""
+                    current = f"{carry} {piece}" if carry else piece
+                else:
+                    current = piece
         if current:
             chunks.append(current)
 
     return chunks
 
 
-def chunk_documents(documents):
+def chunk_documents(documents, max_chars=500, overlap=50):
     if isinstance(documents, str):
         # A bare string is technically iterable (character by character),
         # so without this check a single string passed by mistake would
@@ -96,7 +140,7 @@ def chunk_documents(documents):
         raise TypeError("chunk_documents expects a list of documents, not a single string")
     chunks = []
     for document in documents:
-        chunks.extend(chunk_text(document))
+        chunks.extend(chunk_text(document, max_chars=max_chars, overlap=overlap))
     return chunks
 
 

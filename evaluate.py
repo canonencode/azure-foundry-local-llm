@@ -78,15 +78,64 @@ def check_is_gibberish():
 CHUNKING_CHECKS = [
     ("no positive max_chars", lambda: _expect_raises(ValueError, chunk_text, "text", max_chars=0)),
     ("negative max_chars", lambda: _expect_raises(ValueError, chunk_text, "text", max_chars=-5)),
+    # Checked at overlap=0: with overlap on, adjacent chunks repeat text by
+    # design, so exact rejoin is no longer the right invariant. The original
+    # bug this guards against (str.split(". ") dropping the delimiter) is
+    # independent of overlap.
     ("periods preserved through split+rejoin",
-     lambda: chunk_text("Alpha beta gamma. Delta epsilon zeta. Eta theta iota.", max_chars=25) and
-             " ".join(chunk_text("Alpha beta gamma. Delta epsilon zeta. Eta theta iota.", max_chars=25))
+     lambda: " ".join(chunk_text("Alpha beta gamma. Delta epsilon zeta. Eta theta iota.",
+                                 max_chars=25, overlap=0))
              == "Alpha beta gamma. Delta epsilon zeta. Eta theta iota."),
     ("CRLF paragraph breaks recognized",
      lambda: len(chunk_text("Para one.\r\n\r\nPara two.\r\n\r\nPara three.")) == 3),
     ("chunk_documents rejects a bare string",
      lambda: _expect_raises(TypeError, chunk_documents, "not a list")),
+    ("overlap must be smaller than max_chars",
+     lambda: _expect_raises(ValueError, chunk_text, "text", max_chars=50, overlap=50)),
+    ("negative overlap rejected",
+     lambda: _expect_raises(ValueError, chunk_text, "text", max_chars=50, overlap=-1)),
+    # The point of overlap: consecutive chunks of a split paragraph must
+    # actually share text, so a fact straddling a boundary survives in one
+    # piece somewhere.
+    ("consecutive chunks share text when a paragraph is split",
+     lambda: _chunks_overlap(chunk_text(_LONG_PARAGRAPH, max_chars=200, overlap=50))),
+    # No chunk may exceed max_chars, overlap included. Checked at a deliberately
+    # tight max_chars, where sentences nearly fill a chunk on their own and the
+    # carry has to shrink or drop rather than overflow.
+    ("overlap never pushes a chunk past max_chars",
+     lambda: all(len(c) <= 120 for c in chunk_text(_LONG_PARAGRAPH, max_chars=120, overlap=40))),
+    # Short documents take the fast path and must be untouched by overlap.
+    ("short documents are unaffected by overlap",
+     lambda: chunk_text("One short fact.", overlap=50) == ["One short fact."]),
+    # Hard-wrapped source text must not carry its line breaks into a chunk,
+    # while genuine paragraph breaks still split.
+    ("line wrapping inside a paragraph is normalized",
+     lambda: chunk_text("A wrapped\nparagraph here.") == ["A wrapped paragraph here."]),
+    ("paragraph breaks still split after normalization",
+     lambda: chunk_text("Wrapped\nline one.\n\nWrapped\nline two.")
+             == ["Wrapped line one.", "Wrapped line two."]),
 ]
+
+_LONG_PARAGRAPH = (
+    "Cosine similarity compares the angle between two vectors rather than "
+    "their magnitude. That means a short sentence and a long passage about "
+    "the same topic can still score highly against one another. The measure "
+    "ranges from minus one to one, where one means the vectors point in "
+    "exactly the same direction. In this project it is what ranks stored "
+    "chunks against an incoming question."
+)
+
+
+def _chunks_overlap(chunks):
+    """True if every adjacent pair of chunks shares at least one word."""
+    if len(chunks) < 2:
+        return False
+    for earlier, later in zip(chunks, chunks[1:]):
+        tail_words = set(earlier.lower().split())
+        head_words = later.lower().split()[:8]
+        if not any(word in tail_words for word in head_words):
+            return False
+    return True
 
 
 def _expect_raises(exc_type, func, *args, **kwargs):
