@@ -24,9 +24,9 @@ FALLBACK_TEXT = "I don't have that information."
 # paths apart, only calling is_gibberish() directly can.
 # Known, accepted limitation not covered here: keyboard-mash strings that
 # happen to contain a digraph at the exact run-length-5 boundary (e.g.
-# "sdfgh"), and a few real words unrelated to digraphs (e.g. "postscript",
-# "thumbscrew") can still slip past this heuristic - see the comment above
-# DIGRAPHS in main.py.
+# "sdfgh"), and mash built from adjacent keyboard rows ("poiuytrewq") which
+# is vowel-rich enough to look word-like. Both fall through to
+# RELEVANCE_THRESHOLD, which garbage text essentially never clears.
 GIBBERISH_CHECKS = [
     ("strengths", False),
     ("twelfths", False),
@@ -40,6 +40,20 @@ GIBBERISH_CHECKS = [
     # Turkish) have no characters in VOWELS, so every word in them used to
     # get flagged as gibberish - found during a full adversarial test pass.
     ("Bu bir Türkçe cümledir ve gayet anlamlıdır", False),
+    # English compounds stack consonants where the two halves join, which used
+    # to trip the run check on its own. MIN_VOWEL_RATIO in main.py is what
+    # keeps them out - every one of these was rejected as gibberish before it.
+    ("postscript", False),
+    ("postscripts", False),
+    ("thumbscrew", False),
+    ("corkscrew", False),
+    ("downstream", False),
+    ("windscreen", False),
+    ("heartstrings", False),
+    ("offsprings", False),
+    # A whole question has to survive too: is_gibberish() is any() over words,
+    # so one tripped word rejects the entire question.
+    ("Is the downstream corkscrew postscript relevant?", False),
 ]
 
 
