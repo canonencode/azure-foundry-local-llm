@@ -458,7 +458,7 @@ above too**, each verified live, not just reviewed:
 - All of those connections now pass `timeout=5`, so a narrow
   `ingest.py`-vs-`app.py` locking race retries for 5s instead of failing
   instantly with "database is locked"
-- `app.py`'s cached document count now uses `st.cache_data(ttl=60)` instead
+- `app.py`'s cached chunk count now uses `st.cache_data(ttl=60)` instead
   of caching forever, so it reflects a re-run of `ingest.py` within a
   minute instead of staying stale until the server restarts
 
@@ -595,7 +595,14 @@ retrieval quality rather than at closing plan requirements.
   chunking checks (up from 5), retrieval at 82% precision@1 and 100%
   recall@3, 10/10 end-to-end cases with both relevance-gate fallbacks still
   firing correctly, plus a live check in the browser that the Streamlit UI
-  shows the numbered sources and picks up the new document count
+  shows the numbered sources and picks up the new chunk count
+- **The sidebar was reporting the wrong unit.** It read "39 documents" when
+  the corpus is 20 documents producing 39 chunks. The count comes from
+  `SELECT COUNT(*)` on a table named `documents` whose rows are actually
+  chunks, and the two were the same number for as long as every document was
+  short enough to pass through the chunker unsplit. Adding documents that do
+  split made the label wrong, so it now reads "39 chunks" and the function is
+  named `get_chunk_count()`
 
 ## Lessons Learned
 

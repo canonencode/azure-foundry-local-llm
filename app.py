@@ -182,7 +182,12 @@ def get_clients():
 
 
 @st.cache_data(ttl=60)
-def get_doc_count():
+def get_chunk_count():
+    # Rows in the `documents` table are chunks, not source documents: one
+    # document can split into several. The two were the same number while
+    # every document was short enough to pass through chunk_text() unsplit,
+    # which is why this used to be labelled "documents" and still looked
+    # right. It isn't the same number any more.
     # ttl=60 so this refreshes within a minute if ingest.py is re-run while
     # this server is live, rather than staying stale until the next restart.
     conn = sqlite3.connect("knowledge.db", timeout=5)
@@ -268,7 +273,7 @@ with st.sidebar:
 <div class="spec-row"><span>Chat model</span><code>phi-3-mini-4k</code></div>
 <div class="spec-row"><span>Embedding model</span><code>qwen3-embedding-0.6b</code></div>
 <div class="spec-row"><span>Relevance threshold</span><code>{RELEVANCE_THRESHOLD}</code></div>
-<div class="spec-row"><span>Knowledge base</span><code>{get_doc_count()} documents</code></div>
+<div class="spec-row"><span>Knowledge base</span><code>{get_chunk_count()} chunks</code></div>
 """, unsafe_allow_html=True)
 
     st.divider()
