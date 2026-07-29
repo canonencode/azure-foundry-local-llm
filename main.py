@@ -125,6 +125,23 @@ def is_gibberish(question):
     )
 
 
+# Attribution is built in code from what retrieval actually returned, rather
+# than by asking the model to cite its sources in SYSTEM_PROMPT. Same reason
+# RELEVANCE_THRESHOLD exists: phi-3-mini does not reliably follow prompt
+# instructions (Week 2), so a model-authored citation could name a passage it
+# didn't use, or invent one. Built this way it cannot be wrong - the numbers
+# are the passages that were placed in the context, by construction.
+SOURCE_SNIPPET_CHARS = 100
+
+
+def format_sources(top_chunks, max_chars=SOURCE_SNIPPET_CHARS):
+    lines = []
+    for position, (score, content) in enumerate(top_chunks, start=1):
+        snippet = content if len(content) <= max_chars else content[:max_chars].rstrip() + "..."
+        lines.append(f"  [{position}] (similarity {score:.2f}) {snippet}")
+    return "\n".join(lines)
+
+
 def answer_query(question, chat_client, embedding_client, verbose=True, top_chunks=None):
     if not question.strip() or is_gibberish(question):
         answer = "I don't have that information."
@@ -146,7 +163,12 @@ def answer_query(question, chat_client, embedding_client, verbose=True, top_chun
         print(f"{answer}\n")
         return answer
 
-    context = "\n".join(content for _, content in top_chunks)
+    # Number the passages so the sources printed below line up with what the
+    # model was actually given, in the same order.
+    context = "\n".join(
+        f"[{position}] {content}"
+        for position, (_, content) in enumerate(top_chunks, start=1)
+    )
     messages = [
         {"role": "system", "content": f"{SYSTEM_PROMPT}\n\nContext:\n{context}"},
         {"role": "user", "content": question},
@@ -159,7 +181,16 @@ def answer_query(question, chat_client, embedding_client, verbose=True, top_chun
             if content:
                 print(content, end="", flush=True)
                 answer_parts.append(content)
-    print("\n")
+    print()
+    # Printed, deliberately not appended to the return value - callers
+    # (evaluate.py) compare the returned answer against FALLBACK_TEXT, and
+    # attribution text would break that comparison. Gated on verbose because
+    # app.py renders its own sources in the UI and would otherwise duplicate
+    # them into the server console.
+    if verbose:
+        print("\nSources:")
+        print(format_sources(top_chunks))
+    print()
     return "".join(answer_parts)
 
 

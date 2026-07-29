@@ -260,14 +260,16 @@ for i, entry in enumerate(st.session_state.history):
         if chunks:
             passed_gate = chunks[0][0] >= RELEVANCE_THRESHOLD
             label = (
-                "Chunks used for this answer"
+                "Sources used for this answer"
                 if passed_gate
                 else f"No chunk cleared the relevance threshold ({RELEVANCE_THRESHOLD}) - "
                      "closest matches shown for reference, none were used"
             )
             with st.expander(label):
-                for score, content in chunks:
-                    st.write(f"**{score:.4f}** - {content}")
+                # Numbered to match the order the passages were given to the
+                # model, so [1] here is the same [1] it saw in its context.
+                for position, (score, content) in enumerate(chunks, start=1):
+                    st.write(f"**[{position}]** *(similarity {score:.2f})* {content}")
 
         st.markdown('<div class="delete-row-marker"></div>', unsafe_allow_html=True)
         _, delete_col = st.columns([9, 1])
